@@ -1,6 +1,6 @@
 {
-  "requiredSdkVersion": "~0.0.73",
-  "name": "<plugin-name>",
-  "javascriptEntrypointUrl": "<plugin-name>.js",
+  "requiredSdkVersion": "~0.0.59",
+  "name": "PluginDetachVideo",
+  "javascriptEntrypointUrl": "PluginDetachVideo.js",
   "localesBaseUrl": "https://cdn.dominio.com/pluginabc/"
 }
