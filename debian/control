@@ -9,7 +9,7 @@ Homepage: https://github.com/bigbluebutton/bbb-plugin-picture-in-picture
 Package: bbb-plugin-picture-in-picture
 Architecture: all
 Depends: ${misc:Depends}, nodejs
-Description: Share a webpage with all session participants
- An official BigBlueButton plugin which allows
- the presenter to display a web page to
- all viewers inside of a session.
+Description: Picture-in-picture window for BigBlueButton
+ An official BigBlueButton plugin that starts up a
+ picture-in-picture window with webcams and screen
+ sharing in the session.
