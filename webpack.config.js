@@ -5,8 +5,8 @@ const path = require('path');
 module.exports = {
   entry: './src/index.tsx',
   output: {
-    filename: 'PluginPictureInPicture.js',
-    library: 'PluginPictureInPicture',
+    filename: 'BbbPluginPictureInPicture.js',
+    library: 'BbbPluginPictureInPicture',
     libraryTarget: 'umd',
     publicPath: '/',
     globalObject: 'this',
