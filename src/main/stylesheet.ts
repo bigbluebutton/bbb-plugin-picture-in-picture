@@ -241,6 +241,24 @@ const cssRules = css`
   .shimmer {
     animation: skeleton-slide 1.5s ease-in-out infinite;
   }
+
+  .pip-chat-message-content {
+    a:link {
+      color: #ffffff;
+    }
+
+    a:visited {
+      color: #eaeaea;
+    }
+
+    a:active {
+      color: #bababa;
+    }
+
+    a:hover {
+      color: #9a9a9a;
+    }
+  }
 `;
 
 export default cssRules;

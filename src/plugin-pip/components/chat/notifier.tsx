@@ -105,7 +105,7 @@ function ChatMessageToast({ intl, message }: ChatMessageToastProps): React.React
         )}
       </div>
       {/* eslint-disable-next-line react/no-danger */}
-      <div style={messageStyles} dangerouslySetInnerHTML={{ __html: message.messageAsHtml }} />
+      <div className="pip-chat-message-content" style={messageStyles} dangerouslySetInnerHTML={{ __html: message.messageAsHtml }} />
     </div>
   );
 }
@@ -113,6 +113,7 @@ function ChatMessageToast({ intl, message }: ChatMessageToastProps): React.React
 function ChatNotifier({ intl, pluginApi }: ChatNotifierProps): React.ReactNode {
   const cursor = React.useRef(new Date());
   const { showToast } = useToast();
+  const { data: currentUser } = pluginApi.useCurrentUser();
   const {
     data: chatMessageStream,
   } = pluginApi.useCustomSubscription<ChatMessageStreamResponse>(
@@ -126,10 +127,13 @@ function ChatNotifier({ intl, pluginApi }: ChatNotifierProps): React.ReactNode {
 
   React.useEffect(() => {
     if (!chatMessageStream?.chat_message_stream) return;
+    if (!currentUser) return;
     chatMessageStream.chat_message_stream.forEach((msg) => {
-      showToast(<ChatMessageToast intl={intl} message={msg} />, 'default', 10000);
+      if (msg.senderId !== currentUser.userId) {
+        showToast(<ChatMessageToast intl={intl} message={msg} />, 'default', 10000);
+      }
     });
-  }, [chatMessageStream, showToast]);
+  }, [chatMessageStream, showToast, currentUser, intl]);
 
   return null;
 }

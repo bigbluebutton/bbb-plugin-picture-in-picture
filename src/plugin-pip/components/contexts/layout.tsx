@@ -31,19 +31,24 @@ interface LayoutProviderProps {
   children: React.ReactNode;
   hasScreenshare?: boolean;
   hasCameras?: boolean;
+  hasPresentation?: boolean;
   presenter?: boolean;
   moderator?: boolean;
 }
 
 export function LayoutProvider({
-  children, hasScreenshare, hasCameras, presenter, moderator,
+  children, hasScreenshare, hasCameras, hasPresentation, presenter, moderator,
 }: LayoutProviderProps) {
   const pipWindow = usePipWindow();
   const [swapped, setSwapped] = React.useState<boolean | null>(null);
   const [layout, setLayout] = React.useState<Omit<LayoutContext, 'swapped' | 'swap'> | null>(null);
 
-  const loading = [hasCameras, hasScreenshare, presenter, moderator].some((v) => v == null);
-  const swappedFromProps = (presenter || moderator) && hasScreenshare && hasCameras;
+  const loading = [
+    hasCameras, hasScreenshare, hasPresentation, presenter, moderator,
+  ].some((v) => v == null);
+  const swappedFromProps = (presenter || moderator)
+    && (hasScreenshare || hasPresentation)
+    && hasCameras;
 
   React.useEffect(() => {
     if (!loading) {
@@ -77,7 +82,9 @@ export function LayoutProvider({
         x: 0, y: 0, width: 0, height: 0,
       };
 
-      if (hasScreenshare && hasCameras) {
+      const hasMedia = hasScreenshare || hasPresentation;
+
+      if (hasMedia && hasCameras) {
         screenshareRect = {
           x: 0,
           y: 0,
@@ -90,7 +97,7 @@ export function LayoutProvider({
           width: width * 0.3,
           height: availableHeight,
         };
-      } else if (hasScreenshare) {
+      } else if (hasMedia) {
         screenshareRect = {
           x: 0,
           y: 0,
@@ -106,7 +113,7 @@ export function LayoutProvider({
         };
       }
 
-      if (swapped && hasCameras && hasScreenshare) {
+      if (swapped && hasCameras && hasMedia) {
         // Swap screenshare and cameras for presenter view
         const temp = screenshareRect;
         screenshareRect = camerasRect;
@@ -127,16 +134,16 @@ export function LayoutProvider({
     return () => {
       pipWindow.removeEventListener('resize', handleResize);
     };
-  }, [pipWindow, hasScreenshare, hasCameras, swapped]);
+  }, [pipWindow, hasScreenshare, hasCameras, hasPresentation, swapped]);
 
   const value = React.useMemo(
     () => (layout ? {
       ...layout,
       swapped,
-      canSwap: hasCameras && hasScreenshare,
+      canSwap: hasCameras && (hasScreenshare || hasPresentation),
       swap: () => setSwapped((v) => !v),
     } : null),
-    [layout, swapped, hasCameras, hasScreenshare],
+    [layout, swapped, hasCameras, hasScreenshare, hasPresentation],
   );
 
   return value ? (
