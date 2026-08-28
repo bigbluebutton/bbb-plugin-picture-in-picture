@@ -75,9 +75,7 @@ export function createMultiUserTest(config: MultiUserTestConfig) {
       await attendeeRawPage.goto(joinUrl);
       await attendeeRawPage.waitForSelector('div#layout', { timeout: ELEMENT_WAIT_EXTRA_LONG_TIME });
       attendeePage.settings = await generateSettingsData(attendeeRawPage);
-      if (attendeePage.settings?.autoJoinAudioModal) {
-        await attendeePage.closeAudioModal();
-      }
+      await attendeePage.dismissOpenModals();
       await attendeeRawPage.addStyleTag({
         content: "body { font-family: 'Liberation Sans', Arial, sans-serif; }",
       });

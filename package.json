@@ -32,7 +32,8 @@
     "publish-plugin:dev": "bash scripts/copy-plugin-to-container.sh",
     "test": "npx playwright test",
     "test:isolated": "TEST_MEETINGS=isolated npx playwright test",
-    "test-chromium-ci": "export CI='true' && npx playwright test --project=chromium"
+    "test-chromium-ci": "export CI='true' && npx playwright test --project=chromium",
+    "live-meeting": "npx playwright test --config=playwright.live.config.ts"
   },
   "browserslist": {
     "production": [

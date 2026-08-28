@@ -153,3 +153,72 @@ construction, so it always creates a fresh meeting and two browser contexts for 
 
 Note that neither mode ends the meeting on the BBB server — nothing calls `/api/end`, so meetings linger
 until the server times them out.
+
+---
+
+## Interactive live meeting (`tests/interactive/live-meeting.spec.ts`)
+
+Not a test — a session driver for manual/exploratory work on the plugin. It creates a meeting with the
+plugin loaded, **prints a moderator join URL for you**, then joins bot attendees (6 by default, all with
+different names) that share the synthetic Chromium webcam, and has one of them post a public chat message
+every 30 s so PiP toasts and the stream grid have something to react to.
+
+The bots that use audio join with userdata that pins the audio flow to one short path, so it does not
+depend on how the target server is configured: `bbb_auto_join_audio=true`, `bbb_listen_only_mode=false`,
+`bbb_force_listen_only=false` and `bbb_skip_check_audio=true`. There is deliberately no equivalent for
+the webcam preview — BBB 3.x reads `skipVideoPreview` only from the server settings, with no userdata
+override — so `shareWebcam` observes the client instead of predicting it.
+
+> Every suite goes through `SessionPage.dismissOpenModals()` after the join for the same reason. What the
+> client puts on screen by itself depends on the server (`autoJoin` opens the audio modal,
+> `autoShareWebcam` queues the webcam preview behind it), and a modal left open swallows the first click
+> of whatever runs next — which shows up as a bare "an overlay intercepts pointer events" timeout on a
+> click that looks perfectly innocent.
+
+The first three bots also **join audio unmuted and beep**, each on its own slot of a shared 10 s cycle
+(`0 s / 4 s / 6 s`, at 660 / 880 / 1175 Hz), so the active-speaker machinery always has someone to switch
+between and you can tell by ear who is talking. The beep is not the Chromium fake device — that one is a
+continuous tone. `beepDriver.ts` installs an init script that replaces `getUserMedia` for *audio-only*
+requests with a WebAudio graph it can drive, so silence is the default and each beep is a real, encoded
+microphone signal. Video requests still fall through to the fake camera. After the bots are up, the
+script waits for the talking indicator on a silent bot's client and logs whether the beeps actually made
+it through the audio bridge.
+
+```bash
+npm run live-meeting
+```
+
+It runs under its own `playwright.live.config.ts` (no timeout, one worker, no video/trace/screenshot), and
+the main config lists `tests/interactive/` in `testIgnore` so `npm test` never picks it up.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LIVE_ATTENDEES` | `6` | Number of bot attendees to join |
+| `LIVE_MIC_USERS` | `3` | How many of them join audio unmuted and beep |
+| `LIVE_BEEP_INTERVAL_SEC` | `10` | Length of the beep cycle — each mic bot beeps once per cycle |
+| `LIVE_BEEP_OFFSETS` | `0,4,6` | Comma-separated slots (in seconds) inside the cycle, one per mic bot |
+| `LIVE_BEEP_DURATION_MS` | `400` | Length of one beep |
+| `LIVE_BEEP_VOLUME` | `0.6` | Beep gain, `0`–`1` |
+| `LIVE_CHAT_INTERVAL_SEC` | `30` | Seconds between the automated chat messages |
+| `LIVE_DURATION_MIN` | `60` | Session length in minutes; `0` runs until `Ctrl+C` |
+| `LIVE_MODERATOR_NAME` | `Moderator` | Name embedded in the printed moderator join URL |
+| `LIVE_WEBCAM` | `true` | Set to `"false"` to join the bots without sharing webcams |
+| `LIVE_WITH_PLUGIN` | `true` | Set to `"false"` to run against the stock client |
+
+Examples:
+
+```bash
+LIVE_ATTENDEES=3 npm run live-meeting            # fewer bots
+LIVE_DURATION_MIN=0 npm run live-meeting         # until Ctrl+C
+LIVE_CHAT_INTERVAL_SEC=10 npm run live-meeting   # chattier
+LIVE_MIC_USERS=0 npm run live-meeting            # silent meeting
+LIVE_BEEP_OFFSETS=0,2,4,6 LIVE_MIC_USERS=4 npm run live-meeting
+npm run live-meeting -- --headed                 # watch the bots' browsers
+```
+
+`LIVE_MIC_USERS` without matching `LIVE_BEEP_OFFSETS` spreads the bots evenly across the cycle; the
+uneven `0/4/6` default only applies to the default three.
+
+Unlike the suites, an unreachable plugin manifest is only a **warning** here: the session still starts,
+with the stock client. The meeting is never ended explicitly — once the bots are closed the server times
+it out.

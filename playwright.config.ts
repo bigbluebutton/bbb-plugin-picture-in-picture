@@ -7,7 +7,9 @@ import { server } from './tests/core/parameters';
 export default defineConfig({
   testDir: process.cwd(),
   // Vitest unit tests live under tests/unit and must not be collected by Playwright.
-  testIgnore: ['**/tests/unit/**'],
+  // tests/interactive holds the long-running live-meeting driver, which asserts
+  // nothing and is started by hand (npm run live-meeting).
+  testIgnore: ['**/tests/unit/**', '**/tests/interactive/**'],
   // Playwright's 30s default is not enough here: every test creates a meeting and
   // joins at least one user, and the multi-user suite spins up two browser
   // contexts and two joins before its body even starts (~25-28s when workers run
