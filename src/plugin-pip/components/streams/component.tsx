@@ -427,7 +427,7 @@ function StreamsComponent({
   // Avatars need no async resolution, so they are derived straight from the
   // subscription instead of going through `update()` — otherwise every
   // `voice.talking` flap would re-run the DOM polling above.
-  const avatars = React.useMemo<Omit<AvatarMedia, 'order'>[]>(() => (usersData?.user || [])
+  const avatars = React.useMemo<AvatarMedia[]>(() => (usersData?.user || [])
     .map((user) => ({
       type: 'avatar' as const,
       streamId: `avatar-${user.userId}`,
@@ -435,6 +435,7 @@ function StreamsComponent({
       avatar: user.avatar,
       color: user.color,
       userTalking: user.voice?.talking ?? false,
+      order: 0,
     })), [usersData]);
 
   // Every entry in `streams` already owns a grid cell — the webcams AND the
