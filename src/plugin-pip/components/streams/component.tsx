@@ -175,6 +175,7 @@ interface AvatarMedia {
   avatar: string | null;
   color: string | null;
   userTalking: boolean;
+  order: number;
 }
 
 type GridMedia =
@@ -426,7 +427,7 @@ function StreamsComponent({
   // Avatars need no async resolution, so they are derived straight from the
   // subscription instead of going through `update()` — otherwise every
   // `voice.talking` flap would re-run the DOM polling above.
-  const avatars = React.useMemo<AvatarMedia[]>(() => (usersData?.user || [])
+  const avatars = React.useMemo<Omit<AvatarMedia, 'order'>[]>(() => (usersData?.user || [])
     .map((user) => ({
       type: 'avatar' as const,
       streamId: `avatar-${user.userId}`,
@@ -441,7 +442,16 @@ function StreamsComponent({
   // them, not just the webcams. Counting webcams alone let a meeting with a
   // presentation overshoot MAX_TILES by the number of content tiles.
   const tiles = React.useMemo<GridMedia[]>(
-    () => [...streams, ...avatars.slice(0, availableAvatarSlots(streams.length))],
+    () => {
+      const lastWebcamOrder = streams.reduce((highestOrder, item) => (
+        item.type === 'webcam' ? Math.max(highestOrder, item.order) : highestOrder
+      ), -1);
+      const orderedAvatars = avatars
+        .slice(0, availableAvatarSlots(streams.length))
+        .map((avatar, index) => ({ ...avatar, order: lastWebcamOrder + index + 1 }));
+
+      return [...streams, ...orderedAvatars];
+    },
     [streams, avatars],
   );
 
@@ -490,7 +500,7 @@ function StreamsComponent({
   // not visibly rearrange the moment the real streams arrive.
   const pendingItemCount = (videoStreamsData?.user_camera?.length ?? 0)
     + (isSharing || slideEnabled ? 1 : 0);
-  const gridItemCount = streams.length || pendingItemCount || 4;
+  const gridItemCount = tiles.length || pendingItemCount || 4;
 
   const optimalGrid = React.useMemo(() => findOptimalGrid(
     {
@@ -565,6 +575,7 @@ function StreamsComponent({
                 avatar={item.avatar}
                 color={item.color}
                 userTalking={item.userTalking}
+                order={item.order}
               />
             );
           }
