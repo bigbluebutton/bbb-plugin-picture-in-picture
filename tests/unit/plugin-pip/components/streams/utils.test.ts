@@ -3,6 +3,8 @@ import {
 } from 'vitest';
 import {
   FALLBACK_ASPECT_RATIO,
+  MAX_TILES,
+  availableAvatarSlots,
   calculateOptimalGrid,
   extractVideoStreamIds,
   findOptimalGrid,
@@ -211,5 +213,39 @@ describe('isStreamLive', () => {
       { readyState: 'ended', muted: false },
       { readyState: 'live', muted: false },
     ]))).toBe(true);
+  });
+});
+
+describe('availableAvatarSlots', () => {
+  it('leaves the whole grid to avatars when nothing else occupies a cell', () => {
+    expect(availableAvatarSlots(0)).toBe(MAX_TILES);
+  });
+
+  // Regression: the cap used to be measured against the webcam count alone, so
+  // the presentation/screenshare tile did not consume a slot. With 1
+  // presentation + 3 webcams the grid closed at 1 + 3 + 7 = 11 cells, one over
+  // the promised ceiling of 10.
+  it('counts the presentation tile as an occupied cell', () => {
+    const presentationPlusThreeWebcams = 4;
+    expect(availableAvatarSlots(presentationPlusThreeWebcams)).toBe(6);
+    expect(presentationPlusThreeWebcams + availableAvatarSlots(presentationPlusThreeWebcams))
+      .toBe(MAX_TILES);
+  });
+
+  it('never lets the combined grid exceed MAX_TILES', () => {
+    range(0, MAX_TILES + 5).forEach((occupied) => {
+      expect(occupied + availableAvatarSlots(occupied)).toBeLessThanOrEqual(
+        Math.max(occupied, MAX_TILES),
+      );
+    });
+  });
+
+  it('returns zero once the occupied cells already fill or overflow the grid', () => {
+    expect(availableAvatarSlots(MAX_TILES)).toBe(0);
+    expect(availableAvatarSlots(MAX_TILES + 3)).toBe(0);
+  });
+
+  it('honours an explicit ceiling over the default', () => {
+    expect(availableAvatarSlots(2, 6)).toBe(4);
   });
 });

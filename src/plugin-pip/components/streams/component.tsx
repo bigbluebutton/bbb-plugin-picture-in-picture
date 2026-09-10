@@ -1,11 +1,15 @@
 import * as React from 'react';
 import { useEffect } from 'react';
 import { PluginApi } from 'bigbluebutton-html-plugin-sdk';
-import { useVideoStreams, useScreenshare, usePresentationSnapshot } from './hooks';
+import {
+  useVideoStreams, useScreenshare, usePresentationSnapshot, useUsers,
+} from './hooks';
 import WebcamItem from './webcam-item';
+import AvatarItem from './avatar-item';
 import Video from './video';
 import Skeleton from '../ui/skeleton';
 import {
+  availableAvatarSlots,
   FALLBACK_ASPECT_RATIO,
   findOptimalGrid,
   extractVideoStreamIds,
@@ -164,7 +168,21 @@ interface SlideLoadingMedia {
   streamId: string;
 }
 
-type GridMedia = WebcamMedia | ScreenshareMedia | SlideMedia | SlideLoadingMedia;
+interface AvatarMedia {
+  type: 'avatar';
+  streamId: string;
+  userName: string | null;
+  avatar: string | null;
+  color: string | null;
+  userTalking: boolean;
+}
+
+type GridMedia =
+  | WebcamMedia
+  | ScreenshareMedia
+  | SlideMedia
+  | SlideLoadingMedia
+  | AvatarMedia;
 
 const SLIDE_STREAM_ID = 'presentation-slide';
 const SLIDE_LOADING_STREAM_ID = 'presentation-slide-loading';
@@ -259,6 +277,10 @@ function StreamsComponent({
   const {
     data: screenshareData,
   } = useScreenshare(pluginApi);
+
+  const {
+    data: usersData,
+  } = useUsers(pluginApi);
 
   const isSharing = Boolean(screenshareData?.screenshare[0]?.stream);
   const slideEnabled = Boolean(hasPresentation) && !isSharing;
@@ -401,6 +423,28 @@ function StreamsComponent({
   }, [videoStreamsData, screenshareData, slideImage, slideLoading, slideEnabled, refreshTick,
     ensureObservingVideoList, pipWindow, requestRefresh]);
 
+  // Avatars need no async resolution, so they are derived straight from the
+  // subscription instead of going through `update()` — otherwise every
+  // `voice.talking` flap would re-run the DOM polling above.
+  const avatars = React.useMemo<AvatarMedia[]>(() => (usersData?.user || [])
+    .map((user) => ({
+      type: 'avatar' as const,
+      streamId: `avatar-${user.userId}`,
+      userName: user.name,
+      avatar: user.avatar,
+      color: user.color,
+      userTalking: user.voice?.talking ?? false,
+    })), [usersData]);
+
+  // Every entry in `streams` already owns a grid cell — the webcams AND the
+  // presentation/screenshare tile — so the cap has to be measured against all of
+  // them, not just the webcams. Counting webcams alone let a meeting with a
+  // presentation overshoot MAX_TILES by the number of content tiles.
+  const tiles = React.useMemo<GridMedia[]>(
+    () => [...streams, ...avatars.slice(0, availableAvatarSlots(streams.length))],
+    [streams, avatars],
+  );
+
   useEffect(() => {
     ensureObservingVideoList();
 
@@ -459,7 +503,7 @@ function StreamsComponent({
     aspectRatio,
   ), [contentRect, gridItemCount, paddingInline, paddingBlock, contentFocused, aspectRatio]);
 
-  if (!streams.length && !loading) {
+  if (!tiles.length && !loading) {
     return null;
   }
 
@@ -485,7 +529,7 @@ function StreamsComponent({
       }}
     >
       <div id="plugin-pip-webcams" className="webcams" style={style} ref={webcamsRef}>
-        {loading && !streams.length ? Array.from({ length: gridItemCount }).map((_e, i) => i).map((i) => <Skeleton height="unset" key={i} />) : streams.map((item) => {
+        {loading && !tiles.length ? Array.from({ length: gridItemCount }).map((_e, i) => i).map((i) => <Skeleton height="unset" key={i} />) : tiles.map((item) => {
           if (item.type === 'screenshare') {
             const className = ['pip-video-container', 'pip-screenshare-item'];
             if (contentFocused) className.push('pip-content-focused');
@@ -511,6 +555,17 @@ function StreamsComponent({
               <div key={item.streamId} className={className.join(' ')} style={{ order: -1 }}>
                 <Skeleton width="100%" height="100%" borderRadius={0} />
               </div>
+            );
+          }
+          if (item.type === 'avatar') {
+            return (
+              <AvatarItem
+                key={item.streamId}
+                userName={item.userName}
+                avatar={item.avatar}
+                color={item.color}
+                userTalking={item.userTalking}
+              />
             );
           }
           return (

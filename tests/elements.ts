@@ -24,4 +24,18 @@ export const elements = {
   // ChatNotifier. The toast itself is styled inline with no stable class, so
   // this is the only reliable hook.
   pipChatMessage: '.pip-chat-message-content',
+
+  // ── Grid cells inside the PiP window ────────────────────────────────────
+  // Direct children of the grid: every cell, whatever its kind (webcam, slide,
+  // screenshare or avatar). Used to assert the MAX_TILES ceiling.
+  pipTile: '#plugin-pip-webcams > *',
+  // Shared wrapper class of every non-avatar cell; carries the #111 background.
+  pipVideoContainer: '.pip-video-container',
+  pipSlideItem: '.pip-slide-item',
+
+  // Avatar tiles (src/plugin-pip/components/streams/avatar-item.tsx).
+  pipAvatarItem: '.pip-avatar-item',
+  // The initial-plus-colour fallback, rendered when the user has no avatar
+  // image OR when loading that image failed (onError).
+  pipAvatarCircle: '.pip-avatar-circle',
 };

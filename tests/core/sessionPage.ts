@@ -173,6 +173,61 @@ export class SessionPage {
     );
   }
 
+  /**
+   * Join the audio conference with the microphone, unmuted.
+   *
+   * Mirrors `Page.joinMicrophone` from bigbluebutton-tests/playwright/core/page.ts,
+   * with the echo test treated as optional: servers that set `skipEchoTest` /
+   * `skipEchoTestOnJoin` go straight from the modal to a connected state, so the
+   * echo-test screen is only walked through when it actually shows up.
+   *
+   * Readiness is `muteMicButton` (visible only while connected AND unmuted).
+   * `leaveAudio` is deliberately NOT used: it sits inside the collapsed audio
+   * dropdown and never becomes visible on its own.
+   *
+   * Chromium runs with --use-fake-device-for-media-stream, so the microphone
+   * feeds a synthetic tone - which is what drives `user_voice.talking`.
+   */
+  // Audio is the slowest thing in the suite: the conference negotiation runs
+  // over the media transport and, with several meetings alive at once, routinely
+  // needs more than ELEMENT_WAIT_EXTRA_LONG_TIME on its own. Doubling it here
+  // keeps the parallel runs from failing on a wait that would have succeeded.
+  async joinMicrophone(timeout = ELEMENT_WAIT_EXTRA_LONG_TIME * 2) {
+    // The modal is only pushed up on join when the server sets `app.autoJoin`.
+    // Otherwise it has to be opened from the audio button in the actions bar -
+    // waiting for the modal alone just times out on a fully loaded client.
+    const modal = this.getLocator(e.audioModal);
+    if (!(await modal.isVisible())) {
+      await this.waitAndClick(e.joinAudio, timeout);
+    }
+    await modal.waitFor({ state: 'visible', timeout });
+    await this.waitAndClick(e.microphoneButton, timeout);
+
+    const echoTestButton = this.getLocator(e.joinEchoTestButton);
+    const skipsEchoTest = this.settings?.skipEchoTest
+      || this.settings?.skipEchoTestOnJoin;
+    if (!skipsEchoTest) {
+      await this.page.waitForSelector(e.stopHearingButton, { timeout });
+      await echoTestButton.click({ timeout });
+    }
+
+    await this.wasRemoved(
+      e.establishingAudioLabel,
+      'should remove the establishing-audio label once audio is connected',
+      timeout,
+    );
+
+    // Joining lands muted; unmute so the fake microphone can drive `talking`.
+    const unmute = this.getLocator(e.unmuteMicButton);
+    await unmute.waitFor({ state: 'visible', timeout });
+    await unmute.click({ timeout });
+    await this.hasElement(
+      e.muteMicButton,
+      'should display the mute button once the microphone is live and unmuted',
+      timeout,
+    );
+  }
+
   /** Send a message to the public chat, opening the chat panel if needed. */
   async sendPublicChatMessage(message: string, timeout = ELEMENT_WAIT_TIME) {
     const chatBox = this.getLocator(e.chatBox).first();

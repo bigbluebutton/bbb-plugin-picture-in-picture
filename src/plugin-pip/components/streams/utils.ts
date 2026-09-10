@@ -13,6 +13,24 @@ export function range(start: number, end: number): number[] {
  */
 export const FALLBACK_ASPECT_RATIO = 16 / 9;
 
+/**
+ * Hard ceiling for the number of cells in the PiP grid. It covers EVERY cell —
+ * webcams, the presentation/screenshare tile and the avatars — not just the
+ * webcams, so the grid never grows past this many tiles.
+ */
+export const MAX_TILES = 10;
+
+/**
+ * How many avatar tiles still fit once the streams that already own a cell
+ * (webcams plus the presentation/screenshare tile) are accounted for.
+ */
+export const availableAvatarSlots = (
+  occupiedCells: number,
+  maxTiles: number = MAX_TILES,
+): number => Math.max(0, maxTiles - occupiedCells);
+
+export const createVideoSelector = (streamId: string) => `.video-provider_list .videoContainer[data-stream="${streamId}"] video`;
+
 export const calculateOptimalGrid = (
   canvasWidth: number,
   canvasHeight: number,

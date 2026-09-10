@@ -114,3 +114,33 @@ export async function openPipWindow(
   await setTabHidden(page, true);
   return waitForPipPage(context, timeout);
 }
+
+/**
+ * Read resolved CSS values off the first element matching `selector` inside the
+ * PiP document. Colours come back in the browser's canonical `rgb(r, g, b)`
+ * form, so assertions compare against that rather than the source hex.
+ */
+export async function readComputedStyle(
+  pipPage: Page,
+  selector: string,
+  properties: string[],
+): Promise<Record<string, string> | null> {
+  return pipPage.evaluate(([sel, props]) => {
+    const element = document.querySelector(sel as string);
+    if (!element) return null;
+    const computed = window.getComputedStyle(element);
+    return (props as string[]).reduce<Record<string, string>>((acc, property) => {
+      acc[property] = computed.getPropertyValue(property);
+      return acc;
+    }, {});
+  }, [selector, properties] as [string, string[]]);
+}
+
+/**
+ * The avatar tile belonging to `userName`, matched through its name label.
+ * Falls back to nothing when the label is hidden, so callers that shrink the
+ * tile below the ResizeObserver threshold must capture the locator first.
+ */
+export function avatarTileFor(pipPage: Page, userName: string) {
+  return pipPage.locator('.pip-avatar-item').filter({ hasText: userName });
+}
