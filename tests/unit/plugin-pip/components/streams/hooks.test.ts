@@ -4,15 +4,44 @@ import {
 import { act, renderHook, waitFor } from '@testing-library/react';
 
 vi.mock('bigbluebutton-html-plugin-sdk', () => ({
+  LayoutPresentationAreaUiDataNames: { CURRENT_ELEMENT: 'CURRENT_ELEMENT' },
   PresentationWhiteboardUiDataNames: { CURRENT_PAGE_SNAPSHOT: 'CURRENT_PAGE_SNAPSHOT' },
+  UiLayouts: { WHITEBOARD: 'WHITEBOARD' },
 }));
 
 // eslint-disable-next-line import/first
-import { usePresentationSnapshot } from '../../../../../src/plugin-pip/components/streams/hooks';
+import {
+  usePresentationAreaOpen,
+  usePresentationSnapshot,
+} from '../../../../../src/plugin-pip/components/streams/hooks';
 
 // The hook effect depends on the pluginApi identity, so tests must keep a stable
 // reference across re-renders (a fresh object per render would re-run the effect).
 const makeApi = (getUiData?: unknown) => ({ getUiData } as never);
+
+describe('usePresentationAreaOpen', () => {
+  it('returns whether the whiteboard presentation area is open', () => {
+    const useUiData = vi.fn().mockReturnValue([
+      { currentElement: 'WHITEBOARD', isOpen: false },
+    ]);
+
+    const { result } = renderHook(() => usePresentationAreaOpen({ useUiData } as never));
+
+    expect(result.current).toBe(false);
+    expect(useUiData).toHaveBeenCalledWith(
+      'CURRENT_ELEMENT',
+      [{ currentElement: 'WHITEBOARD', isOpen: true }],
+    );
+  });
+
+  it('defaults to open when the client has not answered', () => {
+    const useUiData = vi.fn((_, defaultValue) => defaultValue);
+
+    const { result } = renderHook(() => usePresentationAreaOpen({ useUiData } as never));
+
+    expect(result.current).toBe(true);
+  });
+});
 
 describe('usePresentationSnapshot', () => {
   it('stays idle and does not fetch when disabled', () => {
@@ -81,6 +110,20 @@ describe('usePresentationSnapshot', () => {
 
     await waitFor(() => expect(result.current.image).toBe('x'));
 
+    rerender({ enabled: false });
+    expect(result.current.image).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('stops loading when disabled after a snapshot request never settles', () => {
+    const getUiData = vi.fn().mockReturnValue(new Promise(() => {}));
+    const api = makeApi(getUiData);
+    const { result, rerender } = renderHook(
+      ({ enabled }) => usePresentationSnapshot(api, enabled),
+      { initialProps: { enabled: true } },
+    );
+
+    expect(result.current.isLoading).toBe(true);
     rerender({ enabled: false });
     expect(result.current.image).toBeNull();
     expect(result.current.isLoading).toBe(false);
