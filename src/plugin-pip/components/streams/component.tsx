@@ -10,57 +10,130 @@ import Video from './video';
 import Skeleton from '../ui/skeleton';
 import {
   availableAvatarSlots,
-  createVideoSelector,
+  FALLBACK_ASPECT_RATIO,
   findOptimalGrid,
   extractVideoStreamIds,
+  isStreamLive,
 } from './utils';
+import {
+  SCREENSHARE_VIDEO_SELECTOR,
+  VIDEO_LIST_CLASSNAME,
+  createVideoSelector,
+  getVideoListContainer,
+  reportMissingSelector,
+} from '../../../common/bbb-selectors';
 import { useLayoutContext } from '../contexts/layout';
 import { usePipWindow } from '../contexts/pip-window';
 import { useRerenderRef } from '../../../common/hooks';
 
+const POLL_TIMEOUT = 5000; // 5 seconds
+
+/**
+ * Shorter wait for an element that exists but whose stream is not delivering
+ * frames: the client keeps the element around while it reconnects, so either a
+ * fresh stream shows up within this window or the tile keeps its last frame
+ * and the grid retries on the next pass.
+ */
+const STALLED_POLL_TIMEOUT = 2000;
+
+/**
+ * Delay between iterations of the polling loops. Zero-delay scheduling would
+ * query the client DOM hundreds of times a second; media takes visible time to
+ * attach anyway, so a cadence well under a second costs nothing perceptible.
+ */
+const POLL_INTERVAL_MS = 150;
+
+/**
+ * Timers for the polling loops below.
+ *
+ * These run while the main document is hidden - that is the whole point of the
+ * plugin - and browsers throttle timers in a backgrounded page to roughly once
+ * a minute. Scheduling on the PiP window instead keeps them on a page that is
+ * visible, so the loops run at full speed. Falls back to the global timers if
+ * no window was provided, and stops once the PiP window is gone.
+ */
+const scheduler = (pipWindow?: Window) => ({
+  now: () => (pipWindow?.performance ?? performance).now(),
+  isGone: () => Boolean(pipWindow?.closed),
+  schedule: (callback: () => void) => {
+    (pipWindow ?? window).setTimeout(callback, POLL_INTERVAL_MS);
+  },
+});
+
 const pollForVideoSrc = (
   streamId: string,
-  container: Element = document.body,
+  container: Element | null | undefined,
+  pipWindow?: Window,
 ): Promise<MediaStream | null> => new Promise((resolve) => {
-  const TIMEOUT = 5000; // 5 seconds
-  const start = performance.now();
+  const timers = scheduler(pipWindow);
+  const start = timers.now();
   const selector = createVideoSelector(streamId);
+  const root = container ?? document.body;
 
   const poll = () => {
-    const timestamp: number = performance.now();
-    const element = container.querySelector(selector);
-    if (element && element instanceof HTMLVideoElement && element.srcObject) {
-      return resolve(element.srcObject as MediaStream);
-    }
-    if (timestamp - start > TIMEOUT) {
+    // The window this loop is scheduled on is gone; stop rather than leave the
+    // promise - and everything awaiting it - pending forever.
+    if (timers.isGone()) return resolve(null);
+    const element = root.querySelector(selector);
+    const stream = element instanceof HTMLVideoElement && element.srcObject instanceof MediaStream
+      ? element.srcObject
+      : null;
+    // Only a live stream settles the poll early. Accepting any srcObject here
+    // used to re-adopt the very stream whose stall triggered this resolution,
+    // which made every stall permanent.
+    if (stream && isStreamLive(stream)) return resolve(stream);
+    const elapsed = timers.now() - start;
+    // The element exists but its stream is not delivering. Give the client a
+    // short window to swap in a fresh one, then settle for the stalled stream:
+    // it still shows its last frame, and the grid schedules a retry for as
+    // long as any tile stays in this state.
+    if (stream && elapsed > STALLED_POLL_TIMEOUT) return resolve(stream);
+    if (elapsed > POLL_TIMEOUT) {
+      reportMissingSelector(
+        createVideoSelector('<streamId>'),
+        `no <video> appeared for stream ${streamId}`,
+      );
       return resolve(null);
     }
-    return setTimeout(poll);
+    return timers.schedule(poll);
   };
 
-  setTimeout(poll);
+  poll();
 });
 
-const pollForScreenshareSrc = (): Promise<MediaProvider | null> => new Promise((resolve) => {
-  const TIMEOUT = 5000;
-  const start = performance.now();
+const pollForScreenshareSrc = (pipWindow?: Window): Promise<MediaProvider | null> => new Promise(
+  (resolve) => {
+    const timers = scheduler(pipWindow);
+    const start = timers.now();
 
-  const poll = () => {
-    const timestamp: number = performance.now();
-    const element = document.querySelector('#screenshareContainer video');
-    if (element && element instanceof HTMLVideoElement && element.srcObject) {
-      return resolve(element.srcObject);
-    }
-    if (timestamp - start > TIMEOUT) {
-      return resolve(null);
-    }
-    return setTimeout(poll);
-  };
+    const poll = () => {
+      if (timers.isGone()) return resolve(null);
+      const timestamp: number = timers.now();
+      const element = document.querySelector(SCREENSHARE_VIDEO_SELECTOR);
+      if (element && element instanceof HTMLVideoElement && element.srcObject) {
+        return resolve(element.srcObject);
+      }
+      if (timestamp - start > POLL_TIMEOUT) {
+        reportMissingSelector(SCREENSHARE_VIDEO_SELECTOR, 'screenshare is active but has no <video>');
+        return resolve(null);
+      }
+      return timers.schedule(poll);
+    };
 
-  setTimeout(poll);
-});
+    poll();
+  },
+);
 
-const VIDEO_LIST_CLASSNAME = 'video-provider_list';
+/** Losing one publisher mutes several tracks at once; coalesce into one refresh. */
+const STALLED_REFRESH_DEBOUNCE_MS = 300;
+
+/**
+ * While any rendered tile holds a stalled stream, re-resolve on this cadence.
+ * The client recovering means it swaps a fresh MediaStream into its own
+ * <video> element - a property write that no MutationObserver or subscription
+ * ever reports - so polling is the only signal available.
+ */
+const STALLED_RETRY_MS = 3000;
 
 interface WebcamMedia {
   type: 'webcam';
@@ -69,6 +142,13 @@ interface WebcamMedia {
   userName: string;
   userId: string;
   userTalking: boolean;
+  /**
+   * Visual position in the grid, applied through the CSS 'order' property.
+   * Tiles are rendered in a deliberately stable DOM order instead: React
+   * moving a live <video> element is not state-preserving in Chromium and can
+   * leave the moved tile frozen on its last frame.
+   */
+  order: number;
 }
 
 interface ScreenshareMedia {
@@ -95,6 +175,7 @@ interface AvatarMedia {
   avatar: string | null;
   color: string | null;
   userTalking: boolean;
+  order: number;
 }
 
 type GridMedia =
@@ -118,11 +199,77 @@ function StreamsComponent({
 }: StreamsComponentProps): React.ReactNode {
   const [streams, setStreams] = React.useState<GridMedia[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [lastUpdate, setLastUpdate] = React.useState(Date.now());
+  // A counter rather than Date.now(): two refresh requests within the same
+  // millisecond would produce identical values and React would drop the second.
+  const [refreshTick, setRefreshTick] = React.useState(0);
+  const [aspectRatio, setAspectRatio] = React.useState(FALLBACK_ASPECT_RATIO);
   const { content: contentRect, contentFocused } = useLayoutContext();
   const pipWindow = usePipWindow();
   const camerasRef = useRerenderRef<HTMLDivElement>(null);
   const webcamsRef = useRerenderRef<HTMLDivElement>(null);
+  // Streams already resolved from the client DOM, kept across refreshes so
+  // tiles that are already playing skip pollForVideoSrc entirely. Only
+  // successful resolutions are cached: a camera the client never renders
+  // (paginated away) resolves to null, is evicted below, and pays the full
+  // poll timeout again on every refresh.
+  const resolvedStreamsRef = React.useRef<Map<string, MediaStream>>(new Map());
+  const stalledTimeoutRef = React.useRef<number | null>(null);
+  const observerRef = React.useRef<MutationObserver | null>(null);
+  const observedNodeRef = React.useRef<Element | null>(null);
+
+  const requestRefresh = React.useCallback(() => setRefreshTick((tick) => tick + 1), []);
+
+  /**
+   * A tile reported that its stream stopped delivering frames. Drop it from the
+   * cache so the next resolution really re-reads the client DOM, and schedule
+   * that resolution. Debounced because losing one publisher usually mutes
+   * several tracks at once, and one refresh answers all of them. Scheduled on
+   * the PiP window's timers: the main document is hidden, and its throttled
+   * timers would sit on this for a second or more.
+   */
+  const handleStreamStalled = React.useCallback((streamId: string) => {
+    resolvedStreamsRef.current.delete(streamId);
+
+    if (stalledTimeoutRef.current !== null) pipWindow.clearTimeout(stalledTimeoutRef.current);
+    stalledTimeoutRef.current = pipWindow.setTimeout(() => {
+      stalledTimeoutRef.current = null;
+      requestRefresh();
+    }, STALLED_REFRESH_DEBOUNCE_MS);
+  }, [pipWindow, requestRefresh]);
+
+  useEffect(() => () => {
+    if (stalledTimeoutRef.current !== null) pipWindow.clearTimeout(stalledTimeoutRef.current);
+  }, [pipWindow]);
+
+  /**
+   * Point the MutationObserver at the client's current video list.
+   *
+   * The node used to be resolved once, so if the client ever replaced that
+   * element the observer would be left watching a detached node and the grid
+   * would silently stop refreshing - forever, with no error anywhere. This
+   * revalidates identity and connectedness instead, and is cheap enough to run
+   * on every resolution pass.
+   */
+  const ensureObservingVideoList = React.useCallback(() => {
+    const targetNode = getVideoListContainer();
+    const observed = observedNodeRef.current;
+
+    if (observed === targetNode && (!observed || observed.isConnected)) return;
+
+    observerRef.current?.disconnect();
+    observedNodeRef.current = targetNode;
+
+    if (!targetNode) return;
+
+    if (!observerRef.current) {
+      observerRef.current = new MutationObserver(requestRefresh);
+    }
+    observerRef.current.observe(targetNode, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+  }, [requestRefresh]);
 
   const {
     data: videoStreamsData,
@@ -141,44 +288,84 @@ function StreamsComponent({
   const { image: slideImage, isLoading: slideLoading } = usePresentationSnapshot(
     pluginApi,
     slideEnabled,
+    pipWindow,
   );
 
   useEffect(() => {
+    // update() can take seconds (pollForVideoSrc waits for the client to render
+    // a <video>), so a newer run can start while this one is still pending.
+    // Without this guard the slower, older run would publish last and overwrite
+    // fresh streams with stale ones - both in the rendered state and in the
+    // shared resolved-stream cache.
+    let cancelled = false;
+
     async function update() {
-      const videoList = document.getElementsByClassName(VIDEO_LIST_CLASSNAME)[0];
+      // Cheap, and the only thing that keeps the observer from silently dying
+      // if the client re-creates its video list.
+      ensureObservingVideoList();
+      const videoList = getVideoListContainer();
       const videoStreamIds = extractVideoStreamIds(videoList);
-      const videoIndexes = Object.fromEntries(Object.entries(videoStreamIds)
-        .map(([index, streamId]) => ([streamId, Number.parseInt(index, 10)])));
+      const videoIndexes = Object.fromEntries(videoStreamIds
+        .map((streamId, index) => [streamId, index] as [string, number]));
       const cameraStreams = videoStreamsData?.user_camera || [];
+
+      // Absent with nobody sharing is normal; absent while cameras exist is not.
+      if (cameraStreams.length && !videoList) {
+        reportMissingSelector(`.${VIDEO_LIST_CLASSNAME}`, 'cameras are being shared but the list is missing');
+      }
+
+      // Cameras that went away must not keep an entry - and must not keep a
+      // dead MediaStream alive either.
+      const currentStreamIds = new Set(cameraStreams.map((stream) => stream.streamId));
+      resolvedStreamsRef.current.forEach((_stream, streamId) => {
+        if (!currentStreamIds.has(streamId)) resolvedStreamsRef.current.delete(streamId);
+      });
 
       const videoSrc = cameraStreams.map(
         async (stream) => {
-          const srcObject = await pollForVideoSrc(stream.streamId, videoList);
+          const cached = resolvedStreamsRef.current.get(stream.streamId);
+          // Only poll for streams we do not already hold a live handle to.
+          const srcObject = cached && isStreamLive(cached)
+            ? cached
+            : await pollForVideoSrc(stream.streamId, videoList, pipWindow);
 
           if (srcObject) {
+            // A superseded run must not touch the shared cache either: it could
+            // overwrite a fresher stream the newer run just resolved.
+            if (!cancelled) resolvedStreamsRef.current.set(stream.streamId, srcObject);
             return {
               type: 'webcam' as const,
               streamId: stream.streamId,
               userName: stream.user?.name,
               userId: stream.user?.userId,
               userTalking: stream.voice?.talking,
+              // Mirrors the client's own ordering; streams the client is not
+              // rendering go last.
+              order: videoIndexes[stream.streamId] ?? videoStreamIds.length,
               srcObject,
             };
           }
 
+          // Same for eviction: a cancelled run timing out must not evict an
+          // entry the newer run has meanwhile resolved.
+          if (!cancelled) resolvedStreamsRef.current.delete(stream.streamId);
           return null;
         },
       );
 
       const videoResolved = await Promise.all(videoSrc);
-      const webcams: GridMedia[] = videoResolved.filter((v) => v).sort((a, b) => {
-        const indexA = videoIndexes[a.streamId] ?? 0;
-        const indexB = videoIndexes[b.streamId] ?? 0;
-        return indexA - indexB;
-      });
+      // DOM order is deliberately stable across refreshes - the client's
+      // activity-based ordering lives in each tile's 'order' field instead.
+      // Mirroring it here would make React physically move <video> elements
+      // whenever someone talks, and a same-document move is not
+      // state-preserving for media elements: the moved tile can come out
+      // paused, frozen on its last frame.
+      const webcams: GridMedia[] = videoResolved
+        .filter((v) => v)
+        .sort((a, b) => a.streamId.localeCompare(b.streamId));
 
       if (isSharing) {
-        const srcObject = await pollForScreenshareSrc();
+        const srcObject = await pollForScreenshareSrc(pipWindow);
         if (srcObject) {
           const screenshareItem: ScreenshareMedia = {
             type: 'screenshare',
@@ -209,13 +396,33 @@ function StreamsComponent({
       return webcams;
     }
 
+    let retryTimer: number | null = null;
+
     setLoading(true);
     update()
-      .then(setStreams)
+      .then((nextStreams) => {
+        if (cancelled) return;
+        setStreams(nextStreams);
+        // A stalled tile keeps its last frame and produces no further events,
+        // and the client swapping in a fresh stream is invisible to every
+        // other trigger - so keep re-resolving until nothing is stalled.
+        const hasStalledStream = nextStreams.some(
+          (item) => item.type === 'webcam' && !isStreamLive(item.srcObject),
+        );
+        if (hasStalledStream) {
+          retryTimer = pipWindow.setTimeout(requestRefresh, STALLED_RETRY_MS);
+        }
+      })
       .finally(() => {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       });
-  }, [videoStreamsData, screenshareData, slideImage, slideLoading, slideEnabled, lastUpdate]);
+
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) pipWindow.clearTimeout(retryTimer);
+    };
+  }, [videoStreamsData, screenshareData, slideImage, slideLoading, slideEnabled, refreshTick,
+    ensureObservingVideoList, pipWindow, requestRefresh]);
 
   // Avatars need no async resolution, so they are derived straight from the
   // subscription instead of going through `update()` — otherwise every
@@ -228,6 +435,7 @@ function StreamsComponent({
       avatar: user.avatar,
       color: user.color,
       userTalking: user.voice?.talking ?? false,
+      order: 0,
     })), [usersData]);
 
   // Every entry in `streams` already owns a grid cell — the webcams AND the
@@ -235,26 +443,50 @@ function StreamsComponent({
   // them, not just the webcams. Counting webcams alone let a meeting with a
   // presentation overshoot MAX_TILES by the number of content tiles.
   const tiles = React.useMemo<GridMedia[]>(
-    () => [...streams, ...avatars.slice(0, availableAvatarSlots(streams.length))],
+    () => {
+      const lastWebcamOrder = streams.reduce((highestOrder, item) => (
+        item.type === 'webcam' ? Math.max(highestOrder, item.order) : highestOrder
+      ), -1);
+      const orderedAvatars = avatars
+        .slice(0, availableAvatarSlots(streams.length))
+        .map((avatar, index) => ({ ...avatar, order: lastWebcamOrder + index + 1 }));
+
+      return [...streams, ...orderedAvatars];
+    },
     [streams, avatars],
   );
 
   useEffect(() => {
-    const targetNode = document.getElementsByClassName(VIDEO_LIST_CLASSNAME)[0];
-    const config = { attributes: true, childList: true, subtree: true };
-
-    const callback = () => {
-      setLastUpdate(Date.now());
-    };
-
-    const observer = new MutationObserver(callback);
-
-    if (targetNode) observer.observe(targetNode, config);
+    ensureObservingVideoList();
 
     return () => {
-      observer.disconnect();
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+      observedNodeRef.current = null;
     };
-  }, [videoStreamsData]);
+  }, [ensureObservingVideoList]);
+
+  // Tiles are laid out to the shape of the video actually being published
+  // rather than to a fixed guess, which would letterbox every tile and waste a
+  // large slice of an already small window.
+  useEffect(() => {
+    const firstWebcam = streams.find((item) => item.type === 'webcam') as WebcamMedia | undefined;
+    if (!firstWebcam) return;
+
+    const settings = firstWebcam.srcObject.getVideoTracks()[0]?.getSettings();
+    if (settings?.width && settings?.height) {
+      setAspectRatio(settings.width / settings.height);
+      return;
+    }
+
+    // Remote tracks often report no dimensions, so fall back to what the
+    // client's own element resolved.
+    const element = getVideoListContainer()
+      ?.querySelector(createVideoSelector(firstWebcam.streamId));
+    if (element instanceof HTMLVideoElement && element.videoWidth && element.videoHeight) {
+      setAspectRatio(element.videoWidth / element.videoHeight);
+    }
+  }, [streams]);
 
   const paddingInline = camerasRef.current ? parseInt(pipWindow.getComputedStyle(camerasRef.current)
     .getPropertyValue('padding-inline'), 10) : 8;
@@ -264,15 +496,23 @@ function StreamsComponent({
   const gridGutter = webcamsRef.current ? parseInt(window.getComputedStyle(webcamsRef.current)
     .getPropertyValue('grid-row-gap'), 10) : 6;
 
+  // While streams are still resolving, size the grid to what the subscription
+  // already reports rather than to a fixed guess of four, so the layout does
+  // not visibly rearrange the moment the real streams arrive.
+  const pendingItemCount = (videoStreamsData?.user_camera?.length ?? 0)
+    + (isSharing || slideEnabled ? 1 : 0);
+  const gridItemCount = tiles.length || pendingItemCount || 4;
+
   const optimalGrid = React.useMemo(() => findOptimalGrid(
     {
       width: contentRect.width - (paddingInline * 2),
       height: contentRect.height - (paddingBlock * 2),
     },
-    tiles.length || 4,
+    gridItemCount,
     gridGutter,
     contentFocused,
-  ), [contentRect, tiles.length, paddingInline, paddingBlock, contentFocused]);
+    aspectRatio,
+  ), [contentRect, gridItemCount, paddingInline, paddingBlock, contentFocused, aspectRatio]);
 
   if (!tiles.length && !loading) {
     return null;
@@ -300,12 +540,12 @@ function StreamsComponent({
       }}
     >
       <div id="plugin-pip-webcams" className="webcams" style={style} ref={webcamsRef}>
-        {loading && !tiles.length ? Array.from({ length: 4 }).map((_e, i) => i).map((i) => <Skeleton height="unset" key={i} />) : tiles.map((item) => {
+        {loading && !tiles.length ? Array.from({ length: gridItemCount }).map((_e, i) => i).map((i) => <Skeleton height="unset" key={i} />) : tiles.map((item) => {
           if (item.type === 'screenshare') {
             const className = ['pip-video-container', 'pip-screenshare-item'];
             if (contentFocused) className.push('pip-content-focused');
             return (
-              <div key={item.streamId} className={className.join(' ')}>
+              <div key={item.streamId} className={className.join(' ')} style={{ order: -1 }}>
                 <Video srcObject={item.srcObject} talking={false} />
               </div>
             );
@@ -314,7 +554,7 @@ function StreamsComponent({
             const className = ['pip-video-container', 'pip-slide-item'];
             if (contentFocused) className.push('pip-content-focused');
             return (
-              <div key={item.streamId} className={className.join(' ')}>
+              <div key={item.streamId} className={className.join(' ')} style={{ order: -1 }}>
                 <img src={item.image} alt="current slide" />
               </div>
             );
@@ -323,7 +563,7 @@ function StreamsComponent({
             const className = ['pip-video-container', 'pip-slide-item'];
             if (contentFocused) className.push('pip-content-focused');
             return (
-              <div key={item.streamId} className={className.join(' ')}>
+              <div key={item.streamId} className={className.join(' ')} style={{ order: -1 }}>
                 <Skeleton width="100%" height="100%" borderRadius={0} />
               </div>
             );
@@ -336,6 +576,7 @@ function StreamsComponent({
                 avatar={item.avatar}
                 color={item.color}
                 userTalking={item.userTalking}
+                order={item.order}
               />
             );
           }
@@ -346,6 +587,8 @@ function StreamsComponent({
               srcObject={item.srcObject}
               userTalking={item.userTalking}
               userName={item.userName}
+              order={item.order}
+              onStalled={() => handleStreamStalled(item.streamId)}
             />
           );
         })}

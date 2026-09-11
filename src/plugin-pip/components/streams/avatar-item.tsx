@@ -5,10 +5,11 @@ interface AvatarItemProps {
   avatar: string | null;
   color: string | null;
   userTalking: boolean;
+  order?: number;
 }
 
 function AvatarItem({
-  userName, avatar, color, userTalking,
+  userName, avatar, color, userTalking, order,
 }: AvatarItemProps) {
   const [squeezed, setSqueezed] = React.useState(false);
   const [avatarFailed, setAvatarFailed] = React.useState(false);
@@ -40,7 +41,7 @@ function AvatarItem({
     <div
       ref={updateRef}
       className={className.join(' ')}
-      style={{ '--avatar-color': color } as React.CSSProperties}
+      style={{ '--avatar-color': color, order } as React.CSSProperties}
     >
       {avatar && !avatarFailed ? (
         <img src={avatar} alt={userName ?? ''} onError={() => setAvatarFailed(true)} />

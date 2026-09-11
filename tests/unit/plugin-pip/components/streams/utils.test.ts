@@ -2,15 +2,16 @@ import {
   describe, it, expect, beforeEach, afterEach,
 } from 'vitest';
 import {
-  ASPECT_RATIO,
+  FALLBACK_ASPECT_RATIO,
   MAX_TILES,
   availableAvatarSlots,
   calculateOptimalGrid,
-  createVideoSelector,
   extractVideoStreamIds,
   findOptimalGrid,
+  isStreamLive,
   range,
 } from '../../../../../src/plugin-pip/components/streams/utils';
+import { createVideoSelector } from '../../../../../src/common/bbb-selectors';
 
 describe('range', () => {
   it('returns the half-open interval [start, end)', () => {
@@ -28,9 +29,13 @@ describe('range', () => {
   });
 });
 
+// These exercise the geometry at a fixed ratio, so they pass one explicitly
+// rather than depending on whatever the current default happens to be.
+const FOUR_THIRDS = 4 / 3;
+
 describe('calculateOptimalGrid', () => {
   it('fills a single cell to the full canvas at the 4:3 aspect ratio', () => {
-    const grid = calculateOptimalGrid(400, 300, 0, ASPECT_RATIO, 1, 1);
+    const grid = calculateOptimalGrid(400, 300, 0, FOUR_THIRDS, 1, 1);
     expect(grid).toEqual({
       columns: 1,
       rows: 1,
@@ -41,7 +46,7 @@ describe('calculateOptimalGrid', () => {
   });
 
   it('splits two items across two columns in a single row', () => {
-    const grid = calculateOptimalGrid(400, 300, 0, ASPECT_RATIO, 2, 2);
+    const grid = calculateOptimalGrid(400, 300, 0, FOUR_THIRDS, 2, 2);
     expect(grid).toEqual({
       columns: 2,
       rows: 1,
@@ -52,7 +57,7 @@ describe('calculateOptimalGrid', () => {
   });
 
   it('accounts for the gutter between columns and rows', () => {
-    const grid = calculateOptimalGrid(400, 300, 10, ASPECT_RATIO, 4, 2);
+    const grid = calculateOptimalGrid(400, 300, 10, FOUR_THIRDS, 4, 2);
     // 4 items in 2 columns -> 2 rows; the row height constraint shrinks the
     // cell so the grid fits: cellHeight=145, cellWidth=194.
     expect(grid).toEqual({
@@ -85,13 +90,33 @@ describe('findOptimalGrid', () => {
 
   it('picks a single column for a single item in a non-focused grid', () => {
     const grid = findOptimalGrid({ width: 400, height: 300 }, 1, 0, false);
+    // Defaults to 16:9, so the cell is width-bound: 400 wide, 225 tall.
     expect(grid).toEqual({
+      columns: 1,
+      rows: 1,
+      width: 400,
+      height: 225,
+      filledArea: 90000,
+    });
+  });
+
+  it('lays the grid out to an explicit aspect ratio when given one', () => {
+    const wide = findOptimalGrid({ width: 400, height: 300 }, 1, 0, false);
+    const fourThirds = findOptimalGrid({ width: 400, height: 300 }, 1, 0, false, FOUR_THIRDS);
+
+    expect(fourThirds).toEqual({
       columns: 1,
       rows: 1,
       width: 400,
       height: 300,
       filledArea: 120000,
     });
+    // A 4:3 tile uses the full canvas height where the 16:9 default cannot.
+    expect(fourThirds.height).toBeGreaterThan(wide.height);
+  });
+
+  it('exports a 16:9 fallback, matching the shape of the PiP window', () => {
+    expect(FALLBACK_ASPECT_RATIO).toBeCloseTo(16 / 9);
   });
 
   it('treats a null gridRect as a zero-sized canvas', () => {
@@ -142,9 +167,52 @@ describe('extractVideoStreamIds', () => {
     expect(extractVideoStreamIds(container)).toEqual(['s1', 's2']);
   });
 
-  it('yields null for a video container without a data-stream attribute', () => {
-    container.innerHTML = '<div class="videoContainer"></div>';
-    expect(extractVideoStreamIds(container)).toEqual([null]);
+  it('skips video containers without a data-stream attribute', () => {
+    container.innerHTML = `
+      <div class="videoContainer" data-stream="s1"></div>
+      <div class="videoContainer"></div>
+      <div class="videoContainer" data-stream="s2"></div>
+    `;
+    expect(extractVideoStreamIds(container)).toEqual(['s1', 's2']);
+  });
+});
+
+describe('isStreamLive', () => {
+  const makeStream = (
+    active: boolean,
+    tracks: Array<Partial<MediaStreamTrack>>,
+  ): MediaStream => ({
+    active,
+    getVideoTracks: () => tracks,
+  } as unknown as MediaStream);
+
+  it('accepts an active stream with a live, unmuted video track', () => {
+    expect(isStreamLive(makeStream(true, [{ readyState: 'live', muted: false }]))).toBe(true);
+  });
+
+  it('rejects a stream whose only video track has ended', () => {
+    expect(isStreamLive(makeStream(true, [{ readyState: 'ended', muted: false }]))).toBe(false);
+  });
+
+  it('rejects a stream whose only video track is muted, even while live', () => {
+    // The frozen-tile case: a remote track that stopped receiving media keeps
+    // readyState 'live' and only flips its muted flag.
+    expect(isStreamLive(makeStream(true, [{ readyState: 'live', muted: true }]))).toBe(false);
+  });
+
+  it('rejects an inactive stream regardless of its tracks', () => {
+    expect(isStreamLive(makeStream(false, [{ readyState: 'live', muted: false }]))).toBe(false);
+  });
+
+  it('rejects a stream with no video tracks at all', () => {
+    expect(isStreamLive(makeStream(true, []))).toBe(false);
+  });
+
+  it('accepts a stream where at least one of several tracks still delivers', () => {
+    expect(isStreamLive(makeStream(true, [
+      { readyState: 'ended', muted: false },
+      { readyState: 'live', muted: false },
+    ]))).toBe(true);
   });
 });
 

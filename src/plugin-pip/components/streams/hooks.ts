@@ -38,6 +38,12 @@ interface PresentationSnapshot {
 export const usePresentationSnapshot = (
   pluginApi: PluginApi,
   enabled: boolean,
+  /**
+   * Window whose timers drive the refresh. The main document is hidden while
+   * the plugin runs and browsers throttle timers there to roughly once a
+   * minute, which would stall the slide; the PiP window is visible.
+   */
+  pipWindow?: Window,
 ): PresentationSnapshot => {
   const [image, setImage] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -68,11 +74,12 @@ export const usePresentationSnapshot = (
     };
 
     update();
-    const intervalId = setInterval(update, SLIDE_SNAPSHOT_INTERVAL_MS);
+    const timerWindow = pipWindow ?? window;
+    const intervalId = timerWindow.setInterval(update, SLIDE_SNAPSHOT_INTERVAL_MS);
     return () => {
-      clearInterval(intervalId);
+      timerWindow.clearInterval(intervalId);
     };
-  }, [pluginApi, enabled]);
+  }, [pluginApi, enabled, pipWindow]);
 
   return { image, isLoading };
 };

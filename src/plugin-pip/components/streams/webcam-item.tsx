@@ -6,10 +6,17 @@ interface WebcamItemProps {
   srcObject: MediaStream;
   userTalking: boolean;
   userName: string;
+  /**
+   * Visual position in the grid (CSS 'order'). Tiles are kept in a stable DOM
+   * order - moving a live <video> element can freeze it - so ordering is
+   * purely visual.
+   */
+  order?: number;
+  onStalled?: () => void;
 }
 
 function WebcamItem({
-  streamId, srcObject, userTalking, userName,
+  streamId, srcObject, userTalking, userName, order, onStalled,
 }: WebcamItemProps) {
   const [squeezed, setSqueezed] = React.useState(false);
   const observerRef = React.useRef<ResizeObserver | null>(null);
@@ -28,8 +35,8 @@ function WebcamItem({
   }, []);
 
   return (
-    <div key={streamId} ref={updateRef} className="pip-video-container">
-      <Video srcObject={srcObject} talking={userTalking} />
+    <div key={streamId} ref={updateRef} className="pip-video-container" style={{ order }}>
+      <Video srcObject={srcObject} talking={userTalking} onStalled={onStalled} />
       {!squeezed && (
         <span className="username">
           {userName}

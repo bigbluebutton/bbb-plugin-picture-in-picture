@@ -26,17 +26,26 @@ export function useLayoutContext(): LayoutContext {
   return layout;
 }
 
+/**
+ * Above this many cameras, content is no longer focused by default. A focused
+ * slide or screenshare spans a 2x2 block: with a handful of webcams that is
+ * most of the window given to static content, and every face shrunk to fit
+ * around it. Toggling stays available either way.
+ */
+const MAX_CAMERAS_FOR_FOCUSED_CONTENT = 3;
+
 interface LayoutProviderProps {
   children: React.ReactNode;
   hasScreenshare?: boolean;
   hasCameras?: boolean;
+  cameraCount?: number;
   hasPresentation?: boolean;
   presenter?: boolean;
   moderator?: boolean;
 }
 
 export function LayoutProvider({
-  children, hasScreenshare, hasCameras, hasPresentation, presenter, moderator,
+  children, hasScreenshare, hasCameras, cameraCount, hasPresentation, presenter, moderator,
 }: LayoutProviderProps) {
   const pipWindow = usePipWindow();
   const [contentFocused, setContentFocused] = React.useState<boolean | null>(null);
@@ -47,7 +56,8 @@ export function LayoutProvider({
   ].some((v) => v == null);
   const initialFocused = (presenter || moderator)
     && (hasScreenshare || hasPresentation)
-    && hasCameras;
+    && hasCameras
+    && (cameraCount ?? 0) <= MAX_CAMERAS_FOR_FOCUSED_CONTENT;
 
   React.useEffect(() => {
     if (!loading && contentFocused === null && typeof initialFocused === 'boolean') {
