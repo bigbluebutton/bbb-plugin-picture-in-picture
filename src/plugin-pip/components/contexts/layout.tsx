@@ -54,25 +54,19 @@ export function LayoutProvider({
   const loading = [
     hasCameras, hasScreenshare, hasPresentation, presenter, moderator,
   ].some((v) => v == null);
+  const hasContent = Boolean(hasScreenshare || hasPresentation);
+  const canFocusContent = Boolean(hasCameras && hasContent);
   const initialFocused = (presenter || moderator)
-    && (hasScreenshare || hasPresentation)
+    && hasContent
     && hasCameras
     && (cameraCount ?? 0) <= MAX_CAMERAS_FOR_FOCUSED_CONTENT;
 
+  // The initial layout is only decided once there is content to focus
   React.useEffect(() => {
-    if (!loading && contentFocused === null && typeof initialFocused === 'boolean') {
+    if (!loading && contentFocused === null && hasContent && typeof initialFocused === 'boolean') {
       setContentFocused(initialFocused);
     }
-  }, [loading, contentFocused, initialFocused]);
-
-  React.useEffect(() => {
-    if (typeof hasScreenshare === 'boolean'
-      && typeof hasPresentation === 'boolean'
-      && !hasScreenshare
-      && !hasPresentation) {
-      setContentFocused(false);
-    }
-  }, [hasScreenshare, hasPresentation]);
+  }, [loading, contentFocused, hasContent, initialFocused]);
 
   React.useEffect(() => {
     if (hasCameras == null || hasScreenshare == null) return undefined;
@@ -116,11 +110,13 @@ export function LayoutProvider({
   const value = React.useMemo<LayoutContext | null>(
     () => (layout ? {
       ...layout,
-      contentFocused: Boolean(contentFocused),
-      canFocusContent: Boolean(hasCameras && (hasScreenshare || hasPresentation)),
+      // The focus preference is kept while there is nothing to focus, so it is
+      // restored as soon as the content comes back.
+      contentFocused: canFocusContent && Boolean(contentFocused),
+      canFocusContent,
       toggleContentFocus: () => setContentFocused((v) => !v),
     } : null),
-    [layout, contentFocused, hasCameras, hasScreenshare, hasPresentation],
+    [layout, contentFocused, canFocusContent],
   );
 
   return value ? (

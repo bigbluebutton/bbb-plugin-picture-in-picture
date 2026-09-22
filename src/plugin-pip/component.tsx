@@ -6,7 +6,11 @@ import ActionsComponent from './components/actions/component';
 import ChatNotifier from './components/chat/notifier';
 import RaisedHandNotifier from './components/raised-hands/component';
 import { ToastProvider } from './components/ui/toast';
-import { useVideoStreams, useScreenshare } from './components/streams/hooks';
+import {
+  usePresentationAreaOpen,
+  useScreenshare,
+  useVideoStreams,
+} from './components/streams/hooks';
 import { PipWindowProvider } from './components/contexts/pip-window';
 import { LayoutProvider } from './components/contexts/layout';
 
@@ -21,13 +25,16 @@ function PluginPip({ intl, pluginApi, pipWindow }: PluginPipProps): React.ReactN
   const { data: webcams } = useVideoStreams(pluginApi);
   const { data: screenshare } = useScreenshare(pluginApi);
   const { data: presentation } = pluginApi.useCurrentPresentation() ?? {};
+  const isPresentationAreaOpen = usePresentationAreaOpen(pluginApi);
 
   const presenter = currentUser?.presenter;
   const moderator = currentUser?.role && currentUser.role === 'MODERATOR';
   const cameraCount = webcams?.user_camera?.length ?? 0;
   const hasWebcams = webcams?.user_camera && Boolean(webcams?.user_camera.length);
   const hasScreenshare = screenshare?.screenshare && Boolean(screenshare?.screenshare?.length);
-  const hasPresentation = presentation && Boolean(presentation);
+  const hasPresentation = presentation === undefined
+    ? undefined
+    : Boolean(presentation) && isPresentationAreaOpen;
 
   return (
     <PipWindowProvider pipWindow={pipWindow}>
