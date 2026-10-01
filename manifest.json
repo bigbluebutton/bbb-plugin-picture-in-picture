@@ -3,6 +3,6 @@
   "requiredSdkVersion": "^1.0.0-beta.2",
   "name": "BbbPluginPictureInPicture",
   "javascriptEntrypointUrl": "BbbPluginPictureInPicture.js",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "localesBaseUrl": "locales"
 }
