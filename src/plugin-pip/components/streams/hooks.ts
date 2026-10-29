@@ -38,9 +38,9 @@ export const usePresentationAreaOpen = (pluginApi: PluginApi) => {
     LayoutPresentationAreaUiDataNames.CURRENT_ELEMENT,
     [{ currentElement: UiLayouts.WHITEBOARD, isOpen: true }],
   );
-  return content.some(
-    (element) => element.currentElement === UiLayouts.WHITEBOARD && element.isOpen,
-  );
+  // The last open element is the one on top of the presentation area
+  const visible = [...content].reverse().find((element) => element.isOpen);
+  return visible?.currentElement === UiLayouts.WHITEBOARD;
 };
 
 const SLIDE_SNAPSHOT_INTERVAL_MS = 5000;

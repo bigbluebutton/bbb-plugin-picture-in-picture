@@ -34,6 +34,28 @@ describe('usePresentationAreaOpen', () => {
     );
   });
 
+  it('returns false when another element is open on top of the whiteboard', () => {
+    const useUiData = vi.fn().mockReturnValue([
+      { currentElement: 'WHITEBOARD', isOpen: true },
+      { currentElement: 'PINNED_SHARED_NOTES', isOpen: true },
+    ]);
+
+    const { result } = renderHook(() => usePresentationAreaOpen({ useUiData } as never));
+
+    expect(result.current).toBe(false);
+  });
+
+  it('returns true when the element on top of the whiteboard is closed', () => {
+    const useUiData = vi.fn().mockReturnValue([
+      { currentElement: 'WHITEBOARD', isOpen: true },
+      { currentElement: 'PINNED_SHARED_NOTES', isOpen: false },
+    ]);
+
+    const { result } = renderHook(() => usePresentationAreaOpen({ useUiData } as never));
+
+    expect(result.current).toBe(true);
+  });
+
   it('defaults to open when the client has not answered', () => {
     const useUiData = vi.fn((_, defaultValue) => defaultValue);
 
