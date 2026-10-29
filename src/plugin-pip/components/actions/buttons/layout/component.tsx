@@ -21,8 +21,6 @@ interface LayoutButtonComponentProps {
 function LayoutButtonComponent({ intl }: LayoutButtonComponentProps) {
   const { toggleContentFocus, canFocusContent, contentFocused } = useLayoutContext();
 
-  if (!canFocusContent) return null;
-
   const className = ['media-btn'];
   const label = intl.formatMessage(
     contentFocused ? intlMessages.unfocusContent : intlMessages.focusContent,
@@ -36,6 +34,7 @@ function LayoutButtonComponent({ intl }: LayoutButtonComponentProps) {
           className={className.join(' ')}
           type="button"
           onClick={toggleContentFocus}
+          disabled={!canFocusContent}
           style={styles}
         >
           <span className="sr-only">

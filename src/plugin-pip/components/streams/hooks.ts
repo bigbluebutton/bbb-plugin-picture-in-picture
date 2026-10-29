@@ -1,5 +1,10 @@
 import * as React from 'react';
-import { PluginApi, PresentationWhiteboardUiDataNames } from 'bigbluebutton-html-plugin-sdk';
+import {
+  LayoutPresentationAreaUiDataNames,
+  PluginApi,
+  PresentationWhiteboardUiDataNames,
+  UiLayouts,
+} from 'bigbluebutton-html-plugin-sdk';
 import {
   type VideoStreamsSubscriptionResult,
   SCREENSHARE,
@@ -26,6 +31,16 @@ export const useScreenshare = (pluginApi: PluginApi) => {
     SCREENSHARE,
   );
   return response;
+};
+
+export const usePresentationAreaOpen = (pluginApi: PluginApi) => {
+  const content = pluginApi.useUiData!(
+    LayoutPresentationAreaUiDataNames.CURRENT_ELEMENT,
+    [{ currentElement: UiLayouts.WHITEBOARD, isOpen: true }],
+  );
+  // The last open element is the one on top of the presentation area
+  const visible = [...content].reverse().find((element) => element.isOpen);
+  return visible?.currentElement === UiLayouts.WHITEBOARD;
 };
 
 const SLIDE_SNAPSHOT_INTERVAL_MS = 5000;
