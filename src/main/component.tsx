@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import * as React from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { BbbPluginSdk, FloatingWindow, MediaAreaOption } from 'bigbluebutton-html-plugin-sdk';
+import { BbbPluginSdk, FloatingWindow, OptionsDropdownOption } from 'bigbluebutton-html-plugin-sdk';
 import { defineMessages } from 'react-intl';
 import { useI18n } from '../common/hooks';
 import Pip from '../plugin-pip/component';
@@ -54,9 +54,8 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
   if (isPipSupported) {
     const activateLabel = intl?.formatMessage(intlMessages.activate) || 'Activate PiP Window';
     const deactivateLabel = intl?.formatMessage(intlMessages.deactivate) || 'Deactivate PiP Window';
-    pluginApi.setMediaAreaItems([
-      new MediaAreaOption({
-        allowed: true,
+    pluginApi.setOptionsDropdownItems([
+      new OptionsDropdownOption({
         icon: { iconName: pipActive ? 'desktop_off' : 'desktop' },
         label: pipActive ? deactivateLabel : activateLabel,
         onClick: () => {
@@ -64,7 +63,6 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
           localStorage.setItem('pip-plugin-active', JSON.stringify(pipActiveRef.current));
           setPipActive(pipActiveRef.current);
         },
-        tooltip: pipActive ? deactivateLabel : activateLabel,
       }),
     ]);
   }
