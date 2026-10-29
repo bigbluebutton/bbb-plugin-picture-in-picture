@@ -8,9 +8,13 @@ import Pip from '../plugin-pip/component';
 import { useVideoStreams, useScreenshare } from '../plugin-pip/components/streams/hooks';
 import FocusWarning from '../plugin-pip/components/warning/component';
 import { useCurrentUserVoice } from '../plugin-pip/components/actions/hooks';
+import type { PipControls } from '../plugin-pip/components/actions/buttons/deactivate/component';
 import styles from './stylesheet';
 
 const isPipSupported = 'documentPictureInPicture' in window;
+
+const PIP_ACTIVE_KEY = 'pip-plugin-active';
+const PIP_DISABLED_MEETING_KEY = 'pip-plugin-disabled-meeting';
 
 const intlMessages = defineMessages({
   activate: {
@@ -35,7 +39,11 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
   const pipActiveRef = React.useRef(active ?? true);
   const pipWindowRef = React.useRef<Window | null>(null);
   const hasMediaRef = React.useRef(false);
-  const [pipActive, setPipActive] = React.useState<boolean>(active ?? true);
+  const meetingIdRef = React.useRef<string | null>(null);
+  const [pipEnabled, setPipEnabled] = React.useState<boolean>(active ?? true);
+  const [disabledForMeeting, setDisabledForMeeting] = React.useState(false);
+  const pipActive = pipEnabled && !disabledForMeeting;
+  pipActiveRef.current = pipActive;
   const [showFocusWarning, setShowFocusWarning] = React.useState(false);
   const { data: webcams } = useVideoStreams(pluginApi);
   const { data: screenshare } = useScreenshare(pluginApi);
@@ -51,6 +59,43 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
   const amISharingMediaRef = React.useRef(joinedVoice || amISharingWebcam);
   amISharingMediaRef.current = joinedVoice || amISharingWebcam;
 
+  const { data: meeting } = pluginApi.useMeetingData((m) => ({ meetingId: m.meetingId }));
+  const meetingId = meeting?.meetingId;
+  meetingIdRef.current = meetingId ?? null;
+
+  React.useEffect(() => {
+    if (!meetingId) return;
+    setDisabledForMeeting(localStorage.getItem(PIP_DISABLED_MEETING_KEY) === meetingId);
+  }, [meetingId]);
+
+  const setPipEnabledState = React.useCallback((value: boolean) => {
+    pipActiveRef.current = value;
+    localStorage.setItem(PIP_ACTIVE_KEY, JSON.stringify(value));
+    setPipEnabled(value);
+    if (value) {
+      localStorage.removeItem(PIP_DISABLED_MEETING_KEY);
+      setDisabledForMeeting(false);
+    }
+  }, []);
+
+  const pipControls = React.useMemo<PipControls>(() => ({
+    close: () => {
+      pipWindowRef.current?.close();
+    },
+    disableForMeeting: () => {
+      pipActiveRef.current = false;
+      if (meetingIdRef.current) {
+        localStorage.setItem(PIP_DISABLED_MEETING_KEY, meetingIdRef.current);
+      }
+      setDisabledForMeeting(true);
+      pipWindowRef.current?.close();
+    },
+    disableAlways: () => {
+      setPipEnabledState(false);
+      pipWindowRef.current?.close();
+    },
+  }), [setPipEnabledState]);
+
   if (isPipSupported) {
     const activateLabel = intl?.formatMessage(intlMessages.activate) || 'Activate PiP Window';
     const deactivateLabel = intl?.formatMessage(intlMessages.deactivate) || 'Deactivate PiP Window';
@@ -58,11 +103,7 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
       new OptionsDropdownOption({
         icon: { iconName: pipActive ? 'desktop_off' : 'desktop' },
         label: pipActive ? deactivateLabel : activateLabel,
-        onClick: () => {
-          pipActiveRef.current = !pipActiveRef.current;
-          localStorage.setItem('pip-plugin-active', JSON.stringify(pipActiveRef.current));
-          setPipActive(pipActiveRef.current);
-        },
+        onClick: () => setPipEnabledState(!pipActiveRef.current),
       }),
     ]);
   }
@@ -121,6 +162,7 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
             pluginApi={pluginApi}
             pipWindow={pipWindow}
             intl={intl}
+            pipControls={pipControls}
           />,
         );
 
@@ -170,7 +212,7 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
       // @ts-expect-error This media action may not be supported by all major browsers.
       navigator.mediaSession.setActionHandler('enterpictureinpicture', null);
     };
-  }, [intl, pluginApi]);
+  }, [intl, pluginApi, pipControls]);
 
   React.useEffect(() => {
     if (!isPipSupported || !pipActive) return undefined;

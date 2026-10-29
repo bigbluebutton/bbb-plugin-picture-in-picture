@@ -7,15 +7,19 @@ import UnreadChatButtonComponent from './buttons/unread-chat/component';
 import RaisedHandsButtonComponent from './buttons/raised-hands/component';
 import UsersBadgeComponent from './buttons/users/component';
 import LayoutButtonComponent from './buttons/layout/component';
+import DeactivateButtonComponent, { type PipControls } from './buttons/deactivate/component';
 import { useLayoutContext } from '../contexts/layout';
 
 interface ActionsComponentProps {
   intl: IntlShape;
   pluginApi: PluginApi;
   pipWindow: Window;
+  pipControls: PipControls;
 }
 
-function ActionsComponent({ intl, pluginApi, pipWindow }: ActionsComponentProps): React.ReactNode {
+function ActionsComponent({
+  intl, pluginApi, pipWindow, pipControls,
+}: ActionsComponentProps): React.ReactNode {
   const { actions } = useLayoutContext();
   return (
     <div
@@ -46,6 +50,7 @@ function ActionsComponent({ intl, pluginApi, pipWindow }: ActionsComponentProps)
         />
         <UsersBadgeComponent intl={intl} pluginApi={pluginApi} />
       </div>
+      <DeactivateButtonComponent intl={intl} pipControls={pipControls} />
     </div>
   );
 }

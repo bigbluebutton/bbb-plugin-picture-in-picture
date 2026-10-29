@@ -1,6 +1,9 @@
 {
   "plugin.pip.activate": "PiP-Fenster aktivieren",
   "plugin.pip.deactivate": "PiP-Fenster deaktivieren",
+  "plugin.pip.menu.close": "Schließen",
+  "plugin.pip.menu.disableForMeeting": "Für diese Konferenz deaktivieren",
+  "plugin.pip.menu.disableAlways": "Immer deaktivieren",
   "plugin.warning.title": "Klicken Sie irgendwo im Dokument, um den Fokus wiederherzustellen.",
   "plugin.warning.message": "Dadurch wird sichergestellt, dass Bild-in-Bild automatisch wieder aktiviert wird, wenn Sie diesen Tab verlassen.",
   "plugin.chat.unknownUser": "Unbekannter Benutzer",
