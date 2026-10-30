@@ -66,6 +66,16 @@ module.exports = {
       patterns: [
         { from: 'manifest.json', to: './' }, // Copy manifest.json to static/ in the output folder
         { from: 'public/locales/', to: './locales/' },
+        // The SDK fetches locales/index.json to find out which locales the plugin provides.
+        {
+          from: 'public/locales/*.json',
+          to: './locales/index.json',
+          transformAll: (assets) => JSON.stringify(
+            assets.map((asset) => path.basename(asset.absoluteFilename)).sort(),
+            null,
+            2,
+          ),
+        },
       ],
     }),
   ],
