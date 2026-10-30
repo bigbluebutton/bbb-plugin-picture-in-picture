@@ -16,6 +16,11 @@ const isPipSupported = 'documentPictureInPicture' in window;
 const PIP_ACTIVE_KEY = 'pip-plugin-active';
 const PIP_DISABLED_MEETING_KEY = 'pip-plugin-disabled-meeting';
 
+// Outer size of the focus warning (max width/height plus padding), used to keep it on screen.
+const FOCUS_WARNING_WIDTH = 378;
+const FOCUS_WARNING_HEIGHT = 91;
+const FOCUS_WARNING_MARGIN = 8;
+
 const intlMessages = defineMessages({
   activate: {
     id: 'plugin.pip.activate',
@@ -232,14 +237,19 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
     if (!isPipSupported || !pipActive) return undefined;
 
     if (showFocusWarning) {
-      const mediaAreaButton = document.querySelector('[data-test="mediaAreaButton"]');
-      if (!mediaAreaButton) return undefined;
-      const rect = mediaAreaButton.getBoundingClientRect();
+      // Show the warning right below the options dropdown button, where the PiP
+      // toggle lives, and keep it inside the viewport.
+      const optionsButton = document.querySelector('[data-test="optionsButton"]');
+      const rect = optionsButton?.getBoundingClientRect();
+      const maxLeft = window.innerWidth - FOCUS_WARNING_WIDTH - FOCUS_WARNING_MARGIN;
+      const maxTop = window.innerHeight - FOCUS_WARNING_HEIGHT - FOCUS_WARNING_MARGIN;
+      const top = rect ? rect.bottom + FOCUS_WARNING_MARGIN : FOCUS_WARNING_MARGIN;
+      const left = rect ? rect.right - FOCUS_WARNING_WIDTH : maxLeft;
       pluginApi.setFloatingWindows([
         new FloatingWindow({
           id: 'plugin-pip-focus-warning',
-          top: rect.top - 90,
-          left: rect.left + (rect.width / 2) - 181,
+          top: Math.max(FOCUS_WARNING_MARGIN, Math.min(top, maxTop)),
+          left: Math.max(FOCUS_WARNING_MARGIN, Math.min(left, maxLeft)),
           movable: true,
           backgroundColor: 'transparent',
           boxShadow: 'none',
