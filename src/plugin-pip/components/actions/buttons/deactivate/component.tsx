@@ -81,7 +81,7 @@ function DeactivateButtonComponent({ intl, pipControls }: DeactivateButtonCompon
     {
       key: 'disableAlways',
       label: intl.formatMessage(intlMessages.disableAlways),
-      icon: 'desktop_off',
+      icon: 'circle_close',
       onClick: pipControls.disableAlways,
     },
   ];
