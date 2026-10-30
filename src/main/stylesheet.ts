@@ -137,6 +137,22 @@ const cssRules = css`
     background-color: rgba(255, 255, 255, 0.1);
   }
 
+  .deactivate-btn {
+    background-color: #DF2721;
+    border-radius: 0.75rem;
+    height: 100%;
+    margin-left: 0.5rem;
+    padding: 0 0.75rem;
+  }
+
+  .deactivate-btn:hover {
+    background-color: #C21F1A;
+  }
+
+  .pip-menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
   button:focus {
     outline: none;
     box-shadow: 0 0 0 2px #ffffff !important;

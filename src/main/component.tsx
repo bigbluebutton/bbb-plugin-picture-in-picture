@@ -1,16 +1,25 @@
 /* eslint-disable no-console */
 import * as React from 'react';
 import * as ReactDOM from 'react-dom/client';
-import { BbbPluginSdk, FloatingWindow, MediaAreaOption } from 'bigbluebutton-html-plugin-sdk';
+import { BbbPluginSdk, FloatingWindow, OptionsDropdownOption } from 'bigbluebutton-html-plugin-sdk';
 import { defineMessages } from 'react-intl';
 import { useI18n } from '../common/hooks';
 import Pip from '../plugin-pip/component';
 import { useVideoStreams, useScreenshare } from '../plugin-pip/components/streams/hooks';
 import FocusWarning from '../plugin-pip/components/warning/component';
 import { useCurrentUserVoice } from '../plugin-pip/components/actions/hooks';
+import type { PipControls } from '../plugin-pip/components/actions/buttons/deactivate/component';
 import styles from './stylesheet';
 
 const isPipSupported = 'documentPictureInPicture' in window;
+
+const PIP_ACTIVE_KEY = 'pip-plugin-active';
+const PIP_DISABLED_MEETING_KEY = 'pip-plugin-disabled-meeting';
+
+// Outer size of the focus warning (max width/height plus padding), used to keep it on screen.
+const FOCUS_WARNING_WIDTH = 378;
+const FOCUS_WARNING_HEIGHT = 91;
+const FOCUS_WARNING_MARGIN = 8;
 
 const intlMessages = defineMessages({
   activate: {
@@ -35,7 +44,11 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
   const pipActiveRef = React.useRef(active ?? true);
   const pipWindowRef = React.useRef<Window | null>(null);
   const hasMediaRef = React.useRef(false);
-  const [pipActive, setPipActive] = React.useState<boolean>(active ?? true);
+  const meetingIdRef = React.useRef<string | null>(null);
+  const [pipEnabled, setPipEnabled] = React.useState<boolean>(active ?? true);
+  const [disabledForMeeting, setDisabledForMeeting] = React.useState(false);
+  const pipActive = pipEnabled && !disabledForMeeting;
+  pipActiveRef.current = pipActive;
   const [showFocusWarning, setShowFocusWarning] = React.useState(false);
   const { data: webcams } = useVideoStreams(pluginApi);
   const { data: screenshare } = useScreenshare(pluginApi);
@@ -51,20 +64,51 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
   const amISharingMediaRef = React.useRef(joinedVoice || amISharingWebcam);
   amISharingMediaRef.current = joinedVoice || amISharingWebcam;
 
+  const { data: meeting } = pluginApi.useMeetingData((m) => ({ meetingId: m.meetingId }));
+  const meetingId = meeting?.meetingId;
+  meetingIdRef.current = meetingId ?? null;
+
+  React.useEffect(() => {
+    if (!meetingId) return;
+    setDisabledForMeeting(localStorage.getItem(PIP_DISABLED_MEETING_KEY) === meetingId);
+  }, [meetingId]);
+
+  const setPipEnabledState = React.useCallback((value: boolean) => {
+    pipActiveRef.current = value;
+    localStorage.setItem(PIP_ACTIVE_KEY, JSON.stringify(value));
+    setPipEnabled(value);
+    if (value) {
+      localStorage.removeItem(PIP_DISABLED_MEETING_KEY);
+      setDisabledForMeeting(false);
+    }
+  }, []);
+
+  const pipControls = React.useMemo<PipControls>(() => ({
+    close: () => {
+      pipWindowRef.current?.close();
+    },
+    disableForMeeting: () => {
+      pipActiveRef.current = false;
+      if (meetingIdRef.current) {
+        localStorage.setItem(PIP_DISABLED_MEETING_KEY, meetingIdRef.current);
+      }
+      setDisabledForMeeting(true);
+      pipWindowRef.current?.close();
+    },
+    disableAlways: () => {
+      setPipEnabledState(false);
+      pipWindowRef.current?.close();
+    },
+  }), [setPipEnabledState]);
+
   if (isPipSupported) {
     const activateLabel = intl?.formatMessage(intlMessages.activate) || 'Activate PiP Window';
     const deactivateLabel = intl?.formatMessage(intlMessages.deactivate) || 'Deactivate PiP Window';
-    pluginApi.setMediaAreaItems([
-      new MediaAreaOption({
-        allowed: true,
+    pluginApi.setOptionsDropdownItems([
+      new OptionsDropdownOption({
         icon: { iconName: pipActive ? 'desktop_off' : 'desktop' },
         label: pipActive ? deactivateLabel : activateLabel,
-        onClick: () => {
-          pipActiveRef.current = !pipActiveRef.current;
-          localStorage.setItem('pip-plugin-active', JSON.stringify(pipActiveRef.current));
-          setPipActive(pipActiveRef.current);
-        },
-        tooltip: pipActive ? deactivateLabel : activateLabel,
+        onClick: () => setPipEnabledState(!pipActiveRef.current),
       }),
     ]);
   }
@@ -123,6 +167,7 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
             pluginApi={pluginApi}
             pipWindow={pipWindow}
             intl={intl}
+            pipControls={pipControls}
           />,
         );
 
@@ -172,7 +217,7 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
       // @ts-expect-error This media action may not be supported by all major browsers.
       navigator.mediaSession.setActionHandler('enterpictureinpicture', null);
     };
-  }, [intl, pluginApi]);
+  }, [intl, pluginApi, pipControls]);
 
   React.useEffect(() => {
     if (!isPipSupported || !pipActive) return undefined;
@@ -192,14 +237,19 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
     if (!isPipSupported || !pipActive) return undefined;
 
     if (showFocusWarning) {
-      const mediaAreaButton = document.querySelector('[data-test="mediaAreaButton"]');
-      if (!mediaAreaButton) return undefined;
-      const rect = mediaAreaButton.getBoundingClientRect();
+      // Show the warning right below the options dropdown button, where the PiP
+      // toggle lives, and keep it inside the viewport.
+      const optionsButton = document.querySelector('[data-test="optionsButton"]');
+      const rect = optionsButton?.getBoundingClientRect();
+      const maxLeft = window.innerWidth - FOCUS_WARNING_WIDTH - FOCUS_WARNING_MARGIN;
+      const maxTop = window.innerHeight - FOCUS_WARNING_HEIGHT - FOCUS_WARNING_MARGIN;
+      const top = rect ? rect.bottom + FOCUS_WARNING_MARGIN : FOCUS_WARNING_MARGIN;
+      const left = rect ? rect.right - FOCUS_WARNING_WIDTH : maxLeft;
       pluginApi.setFloatingWindows([
         new FloatingWindow({
           id: 'plugin-pip-focus-warning',
-          top: rect.top - 90,
-          left: rect.left + (rect.width / 2) - 181,
+          top: Math.max(FOCUS_WARNING_MARGIN, Math.min(top, maxTop)),
+          left: Math.max(FOCUS_WARNING_MARGIN, Math.min(left, maxLeft)),
           movable: true,
           backgroundColor: 'transparent',
           boxShadow: 'none',

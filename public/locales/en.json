@@ -1,6 +1,9 @@
 {
   "plugin.pip.activate": "Activate PiP Window",
   "plugin.pip.deactivate": "Deactivate PiP Window",
+  "plugin.pip.menu.close": "Close",
+  "plugin.pip.menu.disableForMeeting": "Deactivate for this meeting",
+  "plugin.pip.menu.disableAlways": "Deactivate always",
   "plugin.warning.title": "Click anywhere in the document to reactivate focus.",
   "plugin.warning.message": "This ensures that Picture-in-Picture will be automatically reactivated when you leave this tab again.",
   "plugin.chat.unknownUser": "Unknown User",

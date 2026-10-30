@@ -1,6 +1,9 @@
 {
   "plugin.pip.activate": "Ativar Janela PiP",
   "plugin.pip.deactivate": "Desativar Janela PiP",
+  "plugin.pip.menu.close": "Fechar",
+  "plugin.pip.menu.disableForMeeting": "Desativar nesta reunião",
+  "plugin.pip.menu.disableAlways": "Desativar sempre",
   "plugin.warning.title": "Clique em qualquer lugar no documento para reativar o foco.",
   "plugin.warning.message": "Isso garante que o Picture-in-Picture será reativado automaticamente quando você sair desta aba novamente.",
   "plugin.chat.unknownUser": "Usuário Desconhecido",

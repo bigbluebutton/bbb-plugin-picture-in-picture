@@ -1,6 +1,9 @@
 {
   "plugin.pip.activate": "Attiva Finestra PiP",
   "plugin.pip.deactivate": "Disattiva Finestra PiP",
+  "plugin.pip.menu.close": "Chiudi",
+  "plugin.pip.menu.disableForMeeting": "Disattiva per questa riunione",
+  "plugin.pip.menu.disableAlways": "Disattiva sempre",
   "plugin.warning.title": "Clicca in un punto qualsiasi del documento per riattivare il focus.",
   "plugin.warning.message": "Questo assicura che la modalità Picture-in-Picture verrà automaticamente riattivata quando lascerai di nuovo questa scheda.",
   "plugin.chat.unknownUser": "Utente Sconosciuto",
