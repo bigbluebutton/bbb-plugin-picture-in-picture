@@ -2,6 +2,7 @@ import * as React from 'react';
 import { PluginApi } from 'bigbluebutton-html-plugin-sdk';
 import { defineMessages, IntlShape } from 'react-intl';
 import { useToast } from '../ui/toast';
+import { getRoleColor, getInitials } from './utils';
 import { CHAT_MESSAGE_STREAM, type ChatMessageStreamResponse, type Message } from './queries';
 
 const intlMessages = defineMessages({
@@ -22,14 +23,6 @@ interface ChatMessageToastProps {
 }
 
 function ChatMessageToast({ intl, message }: ChatMessageToastProps): React.ReactElement {
-  const getRoleColor = (role: string | null): string => {
-    const roleColors: Record<string, string> = {
-      MODERATOR: '#3b82f6',
-      VIEWER: '#8b5cf6',
-    };
-    return role ? (roleColors[role] || '#6b7280') : '#6b7280';
-  };
-
   const containerStyles: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
@@ -82,11 +75,6 @@ function ChatMessageToast({ intl, message }: ChatMessageToastProps): React.React
     fontSize: '11px',
     color: 'rgba(255, 255, 255, 0.6)',
     fontStyle: 'italic',
-  };
-
-  const getInitials = (name: string | null): string => {
-    if (!name) return '?';
-    return name.substring(0, 2);
   };
 
   return (

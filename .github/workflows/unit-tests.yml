@@ -1,0 +1,28 @@
+name: Unit tests
+on: [pull_request]
+
+permissions:
+  contents: read
+jobs:
+  unit-tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Merge branches
+        uses: ./.github/actions/merge-branches
+      - name: install node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: run npm install
+        run: npm install
+      - name: run unit tests
+        run: npm run test:unit:coverage
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
