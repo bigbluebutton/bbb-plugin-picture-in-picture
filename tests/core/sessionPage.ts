@@ -201,12 +201,22 @@ export class SessionPage {
       await this.waitAndClick(e.joinAudio, timeout);
     }
     await modal.waitFor({ state: 'visible', timeout });
-    await this.waitAndClick(e.microphoneButton, timeout);
 
+    // The modal opens on the microphone / listen-only choice only when the
+    // client offers listen-only (`listenOnlyMode`). Otherwise - the BBB 4.0
+    // default - it skips straight to the audio settings screen, whose confirm
+    // button is `joinEchoTestButton`.
+    const microphoneButton = this.getLocator(e.microphoneButton);
     const echoTestButton = this.getLocator(e.joinEchoTestButton);
+    await microphoneButton.or(echoTestButton).first().waitFor({ state: 'visible', timeout });
+    const offersAudioOptions = await microphoneButton.isVisible();
+    if (offersAudioOptions) {
+      await microphoneButton.click({ timeout });
+    }
+
     const skipsEchoTest = this.settings?.skipEchoTest
       || this.settings?.skipEchoTestOnJoin;
-    if (!skipsEchoTest) {
+    if (!offersAudioOptions || !skipsEchoTest) {
       await this.page.waitForSelector(e.stopHearingButton, { timeout });
       await echoTestButton.click({ timeout });
     }

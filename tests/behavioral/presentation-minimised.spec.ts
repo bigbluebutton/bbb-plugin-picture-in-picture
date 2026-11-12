@@ -81,7 +81,13 @@ test.describe('Picture-in-Picture Plugin - minimised presentation', () => {
 
     await modPage.page.click('[data-test="minimizePresentation"]');
 
-    await expect(pipPage.locator(e.pipCameras)).toHaveCount(0);
+    // With no webcam and the presentation minimised the grid no longer goes
+    // empty: the camera-less moderator is shown as an avatar tile. What must
+    // hold is that the slide tile leaves, the window and its controls stay up,
+    // and there is no content left to focus.
+    await expect(pipPage.locator(e.pipSlideItem))
+      .toHaveCount(0, { timeout: ELEMENT_WAIT_LONGER_TIME });
+    await expect(pipPage.locator(e.pipAvatarItem)).toHaveCount(1);
     await expect(pipPage.getByRole('button', { name: 'Focus content' })).toBeDisabled();
 
     await setTabHidden(modPage.page, false);
