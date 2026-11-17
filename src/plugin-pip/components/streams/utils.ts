@@ -29,6 +29,18 @@ export const availableAvatarSlots = (
   maxTiles: number = MAX_TILES,
 ): number => Math.max(0, maxTiles - occupiedCells);
 
+/**
+ * Whether camera-less participants get avatar tiles. Mirrors the BBB client,
+ * whose camera dock is only shown when someone shares a webcam or the
+ * presentation area is closed (`display: numCameras > 0 || !presentation.isOpen`
+ * in the unified layout): while there is content and no webcam, the content gets
+ * the whole window instead of sharing the grid with every avatar.
+ */
+export const shouldShowAvatars = (
+  webcamCount: number,
+  hasContent: boolean,
+): boolean => webcamCount > 0 || !hasContent;
+
 export const calculateOptimalGrid = (
   canvasWidth: number,
   canvasHeight: number,

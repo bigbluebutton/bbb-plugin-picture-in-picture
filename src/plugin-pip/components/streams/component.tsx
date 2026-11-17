@@ -10,6 +10,7 @@ import Video from './video';
 import Skeleton from '../ui/skeleton';
 import {
   availableAvatarSlots,
+  shouldShowAvatars,
   FALLBACK_ASPECT_RATIO,
   findOptimalGrid,
   extractVideoStreamIds,
@@ -442,8 +443,18 @@ function StreamsComponent({
   // presentation/screenshare tile — so the cap has to be measured against all of
   // them, not just the webcams. Counting webcams alone let a meeting with a
   // presentation overshoot MAX_TILES by the number of content tiles.
+  // Like the client, avatars only join the grid when someone shares a webcam or
+  // there is no content; otherwise the content gets the whole window. The
+  // webcam count comes from the subscription rather than the resolved streams so
+  // avatars do not flash in while a webcam is still being resolved.
+  const showAvatars = shouldShowAvatars(
+    videoStreamsData?.user_camera?.length ?? 0,
+    isSharing || slideEnabled,
+  );
+
   const tiles = React.useMemo<GridMedia[]>(
     () => {
+      if (!showAvatars) return streams;
       const lastWebcamOrder = streams.reduce((highestOrder, item) => (
         item.type === 'webcam' ? Math.max(highestOrder, item.order) : highestOrder
       ), -1);
@@ -453,7 +464,7 @@ function StreamsComponent({
 
       return [...streams, ...orderedAvatars];
     },
-    [streams, avatars],
+    [streams, avatars, showAvatars],
   );
 
   useEffect(() => {

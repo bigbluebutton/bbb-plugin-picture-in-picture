@@ -14,11 +14,11 @@
  * presentation is showing. To SEE that difference the avatar supply has to
  * saturate the pre-fix allowance, which needs
  *     webcamCount + (MAX_TILES - webcamCount) = MAX_TILES
- * participants - ten, whatever the webcam split. Sharing webcams does not lower
- * the count, it only makes each join more expensive, so the cheapest shape is
- * ten camera-less users with the default presentation on screen:
- *     before: 1 slide + 10 avatars = 11 cells  (over the ceiling)
- *     after:  1 slide +  9 avatars = 10 cells
+ * participants - ten, whatever the webcam split. Avatars only share the grid
+ * with the presentation while someone shares a webcam (like the client's camera
+ * dock), so the moderator shares one and the other nine stay camera-less:
+ *     before: 1 slide + 1 webcam + 9 avatars = 11 cells  (over the ceiling)
+ *     after:  1 slide + 1 webcam + 8 avatars = 10 cells
  *
  * That makes this the slowest test in the suite by a wide margin. It is kept in
  * its own file so it can be excluded with `--grep-invert` when a quick run is
@@ -63,9 +63,11 @@ base.describe('Picture-in-Picture Plugin - Behavioural (MAX_TILES ceiling)', () 
   base('should never render more than MAX_TILES cells, counting the presentation', async ({ multiUserTest, browser }) => {
     const { modPage } = multiUserTest;
 
-    // The fixture already provides two camera-less users (moderator + attendee),
-    // so eight more make ten. None of them shares a camera, so all ten are
-    // avatar candidates and the default presentation supplies the content cell.
+    // The fixture provides the moderator and the attendee, so eight more make
+    // ten. The moderator shares a webcam - without one the avatars would make
+    // way for the presentation - which leaves nine avatar candidates next to the
+    // webcam and the default presentation's content cell.
+    await modPage.shareWebcam();
     const fillerCount = MAX_TILES - 2;
     joined = await joinExtraUsers(
       browser,
@@ -103,19 +105,21 @@ base.describe('Picture-in-Picture Plugin - Behavioural (MAX_TILES ceiling)', () 
 
     const tileCount = await countTiles();
     const contentCells = await pipPage.locator(e.pipSlideItem).count();
+    const webcamCells = await pipPage.locator(e.pipVideo).count();
     const avatarCells = await pipPage.locator(e.pipAvatarItem).count();
 
     expect(
       contentCells,
       'the presentation should occupy a cell, which is what the old formula ignored',
     ).toBe(1);
+    expect(webcamCells, 'the moderator webcam should occupy a cell').toBe(1);
     expect(
-      contentCells + avatarCells,
-      'every cell should be either the presentation or an avatar in this setup',
+      contentCells + webcamCells + avatarCells,
+      'every cell should be the presentation, the webcam or an avatar in this setup',
     ).toBe(tileCount);
     expect(
       tileCount,
-      `presentation + avatars must fit within MAX_TILES (${MAX_TILES}); `
+      `presentation + webcam + avatars must fit within MAX_TILES (${MAX_TILES}); `
       + 'the pre-fix formula released one slot too many and closed at 11',
     ).toBeLessThanOrEqual(MAX_TILES);
 
