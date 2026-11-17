@@ -27,58 +27,49 @@ export function useLayoutContext(): LayoutContext {
 }
 
 /**
- * Above this many participant tiles (webcams plus avatars), content is no
- * longer focused by default. A focused slide or screenshare spans a 2x2 block:
- * with a handful of participants that is most of the window given to static
- * content, and every tile shrunk to fit around it. Toggling stays available
- * either way.
+ * Above this many cameras, content is no longer focused by default. A focused
+ * slide or screenshare spans a 2x2 block: with a handful of webcams that is
+ * most of the window given to static content, and every face shrunk to fit
+ * around it. Toggling stays available either way.
  */
-const MAX_TILES_FOR_FOCUSED_CONTENT = 3;
+const MAX_CAMERAS_FOR_FOCUSED_CONTENT = 3;
 
 interface LayoutProviderProps {
   children: React.ReactNode;
   hasScreenshare?: boolean;
-  /**
-   * Whether there is at least one participant tile (a webcam or an avatar) to
-   * show next to the content. `undefined` while that is still loading.
-   */
-  hasTiles?: boolean;
-  /** Number of participant tiles: webcams plus avatars. */
-  tileCount?: number;
+  hasCameras?: boolean;
+  cameraCount?: number;
   hasPresentation?: boolean;
   presenter?: boolean;
   moderator?: boolean;
 }
 
 export function LayoutProvider({
-  children, hasScreenshare, hasTiles, tileCount, hasPresentation, presenter, moderator,
+  children, hasScreenshare, hasCameras, cameraCount, hasPresentation, presenter, moderator,
 }: LayoutProviderProps) {
   const pipWindow = usePipWindow();
   const [contentFocused, setContentFocused] = React.useState<boolean | null>(null);
   const [layout, setLayout] = React.useState<Pick<LayoutContext, 'content' | 'actions'> | null>(null);
 
   const loading = [
-    hasTiles, hasScreenshare, hasPresentation, presenter, moderator,
+    hasCameras, hasScreenshare, hasPresentation, presenter, moderator,
   ].some((v) => v == null);
   const hasContent = Boolean(hasScreenshare || hasPresentation);
-  const canFocusContent = Boolean(hasTiles && hasContent);
+  const canFocusContent = Boolean(hasCameras && hasContent);
   const initialFocused = (presenter || moderator)
     && hasContent
-    && hasTiles
-    && (tileCount ?? 0) <= MAX_TILES_FOR_FOCUSED_CONTENT;
+    && hasCameras
+    && (cameraCount ?? 0) <= MAX_CAMERAS_FOR_FOCUSED_CONTENT;
 
-  // The initial layout is only decided once there is content AND at least one
-  // participant tile to focus it against. Right after the PiP window opens its
-  // subscriptions can briefly report no tile at all (the webcam list lags behind
-  // the user list); deciding then would lock the layout unfocused for good.
+  // The initial layout is only decided once there is content to focus
   React.useEffect(() => {
-    if (!loading && contentFocused === null && canFocusContent && typeof initialFocused === 'boolean') {
+    if (!loading && contentFocused === null && hasContent && typeof initialFocused === 'boolean') {
       setContentFocused(initialFocused);
     }
-  }, [loading, contentFocused, canFocusContent, initialFocused]);
+  }, [loading, contentFocused, hasContent, initialFocused]);
 
   React.useEffect(() => {
-    if (hasTiles == null || hasScreenshare == null) return undefined;
+    if (hasCameras == null || hasScreenshare == null) return undefined;
 
     const handleResize = () => {
       const width = pipWindow.innerWidth;
@@ -114,7 +105,7 @@ export function LayoutProvider({
     return () => {
       pipWindow.removeEventListener('resize', handleResize);
     };
-  }, [pipWindow, hasScreenshare, hasTiles]);
+  }, [pipWindow, hasScreenshare, hasCameras]);
 
   const value = React.useMemo<LayoutContext | null>(
     () => (layout ? {

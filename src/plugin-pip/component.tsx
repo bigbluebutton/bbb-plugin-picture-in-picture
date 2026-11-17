@@ -10,7 +10,6 @@ import { ToastProvider } from './components/ui/toast';
 import {
   usePresentationAreaOpen,
   useScreenshare,
-  useUsers,
   useVideoStreams,
 } from './components/streams/hooks';
 import { PipWindowProvider } from './components/contexts/pip-window';
@@ -34,17 +33,8 @@ function PluginPip({
 
   const presenter = currentUser?.presenter;
   const moderator = currentUser?.role && currentUser.role === 'MODERATOR';
-  // Participants without a camera are shown as avatar tiles, so they count as
-  // tiles the content can be focused against, just like webcams. The avatar
-  // count is only trusted once its subscription has settled; until then the
-  // tiles are reported as unknown so the initial focus is not decided early.
-  const { data: users, loading: usersLoading } = useUsers(pluginApi);
-  const cameraCount = webcams?.user_camera?.length;
-  const avatarCount = usersLoading ? undefined : (users?.user?.length ?? 0);
-  const tileCount = cameraCount === undefined || avatarCount === undefined
-    ? undefined
-    : cameraCount + avatarCount;
-  const hasTiles = tileCount === undefined ? undefined : tileCount > 0;
+  const cameraCount = webcams?.user_camera?.length ?? 0;
+  const hasWebcams = webcams?.user_camera && Boolean(webcams?.user_camera.length);
   const hasScreenshare = screenshare?.screenshare && Boolean(screenshare?.screenshare?.length);
   const hasPresentation = presentation === undefined
     ? undefined
@@ -53,8 +43,8 @@ function PluginPip({
   return (
     <PipWindowProvider pipWindow={pipWindow}>
       <LayoutProvider
-        hasTiles={hasTiles}
-        tileCount={tileCount}
+        hasCameras={hasWebcams}
+        cameraCount={cameraCount}
         hasScreenshare={hasScreenshare}
         hasPresentation={hasPresentation}
         presenter={presenter}

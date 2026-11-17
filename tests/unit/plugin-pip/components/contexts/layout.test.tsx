@@ -18,17 +18,15 @@ function FocusState() {
 
 interface LayoutHarnessProps {
   hasPresentation?: boolean;
-  /** Webcams plus avatars; `undefined` while the participants are loading. */
-  tileCount?: number | null;
+  hasCameras?: boolean;
 }
 
-function LayoutHarness({ hasPresentation, tileCount = 1 }: LayoutHarnessProps) {
-  const count = tileCount ?? undefined;
+function LayoutHarness({ hasPresentation, hasCameras = true }: LayoutHarnessProps) {
   return (
     <PipWindowProvider pipWindow={window}>
       <LayoutProvider
-        hasTiles={count === undefined ? undefined : count > 0}
-        tileCount={count}
+        hasCameras={hasCameras}
+        cameraCount={hasCameras ? 1 : 0}
         hasScreenshare={false}
         hasPresentation={hasPresentation}
         presenter
@@ -100,43 +98,5 @@ describe('LayoutProvider', () => {
 
     rerender(<LayoutHarness hasPresentation />);
     await screen.findByText('unfocused');
-  });
-
-  // Participants without a camera are rendered as avatar tiles, which the
-  // content can be focused against just like webcams.
-  it('focuses the content when the only participant tiles are avatars', async () => {
-    render(<LayoutHarness hasPresentation tileCount={2} />);
-
-    await screen.findByText('focused');
-  });
-
-  it('cannot focus the content when there is no participant tile at all', async () => {
-    render(<LayoutHarness hasPresentation tileCount={0} />);
-
-    fireEvent.click(await screen.findByText('unfocused'));
-    await screen.findByText('unfocused');
-  });
-
-  it('leaves the content unfocused by default in a crowded meeting', async () => {
-    render(<LayoutHarness hasPresentation tileCount={4} />);
-
-    fireEvent.click(await screen.findByText('unfocused'));
-    await screen.findByText('focused');
-  });
-
-  it('waits for the participant count before deciding the initial focus', async () => {
-    const { rerender } = render(<LayoutHarness hasPresentation tileCount={null} />);
-
-    rerender(<LayoutHarness hasPresentation tileCount={2} />);
-    await screen.findByText('focused');
-  });
-
-  it('applies the initial focus when the first participant tile shows up late', async () => {
-    const { rerender } = render(<LayoutHarness hasPresentation tileCount={0} />);
-
-    await screen.findByText('unfocused');
-
-    rerender(<LayoutHarness hasPresentation tileCount={1} />);
-    await screen.findByText('focused');
   });
 });
