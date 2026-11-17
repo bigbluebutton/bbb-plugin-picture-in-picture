@@ -116,6 +116,13 @@ meeting, and that a chat message sent by the attendee surfaces as a toast inside
 window. The chat case needs two users because `ChatNotifier` deliberately skips the current user's own
 messages (`msg.senderId !== currentUser.userId`).
 
+### Behavioural – deactivate menu (`tests/behavioral/deactivate-menu.spec.ts`)
+
+Verify the three options of the deactivate menu inside the PiP window: "Close" only closes the window
+and it reopens on the next background; "Deactivate for this meeting" keeps it closed until the options
+dropdown toggle activates it again; "Deactivate always" stores `false` under `pip-plugin-active`. Each
+test creates its own meeting, since two of the options change state the next test would inherit.
+
 > **Note on the PiP window contents.** The plugin renders its grid inside a `documentPictureInPicture`
 > window, and that window *is* reachable — Chromium exposes it as an ordinary `about:blank` page on the
 > same `BrowserContext`. This relies on **undocumented behaviour**: the spec requires transient
