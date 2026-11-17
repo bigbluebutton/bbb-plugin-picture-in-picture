@@ -9,6 +9,11 @@
  *
  * All of that lives inside the Document PiP window, so every assertion here goes
  * through `openPipWindow`.
+ *
+ * Like the client's camera dock, avatar tiles only show when someone shares a
+ * webcam or there is no content. Nobody shares a webcam in these tests, so they
+ * open the window through `openPipWithoutContent`, which minimises the
+ * presentation first.
  */
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { expect, Page } from '@playwright/test';
@@ -24,6 +29,7 @@ import { avatarTileFor, openPipWindow, readComputedStyle } from '../core/pipWind
 import { closeJoinedUsers, JoinedUser, joinExtraUsers } from '../core/joinUser';
 import { server } from '../core/parameters';
 import { createMultiUserTest } from './fixtures';
+import { SessionPage } from '../core/sessionPage';
 
 const PLUGIN_NAME = 'picture-in-picture';
 const ENV_VAR_NAME = 'PICTURE_IN_PICTURE_PLUGIN_URL';
@@ -52,6 +58,21 @@ base.beforeAll(checkPluginAvailability({
   setPluginUrl,
   getPluginUrl,
 }));
+
+/**
+ * Open the PiP window with the presentation minimised, so the camera-less
+ * participants get avatar tiles. The window itself opens from the presentation
+ * (the main document counts it as media even when minimised), and the slide
+ * tile must be gone before the avatars are expected.
+ */
+async function openPipWithoutContent(modPage: SessionPage): Promise<Page> {
+  await modPage.page.waitForSelector(e.whiteboard, { timeout: ELEMENT_WAIT_LONGER_TIME });
+  const pipPage = await openPipWindow(modPage.page.context(), modPage.page);
+  await modPage.page.click(e.minimizePresentation);
+  await expect(pipPage.locator(e.pipSlideItem))
+    .toHaveCount(0, { timeout: ELEMENT_WAIT_LONGER_TIME });
+  return pipPage;
+}
 
 /** Wait until the PiP grid has rendered an avatar tile for `userName`. */
 async function waitForAvatarTile(pipPage: Page, userName: string) {
@@ -83,7 +104,7 @@ base.describe('Picture-in-Picture Plugin - Behavioural (avatar tiles)', () => {
 
     joined = await joinExtraUsers(browser, modPage.meetingId, [{ fullName: userName }]);
 
-    const pipPage = await openPipWindow(modPage.page.context(), modPage.page);
+    const pipPage = await openPipWithoutContent(modPage);
     const tile = await waitForAvatarTile(pipPage, userName);
 
     // No avatarURL was passed, so the plugin falls back to the coloured circle.
@@ -128,7 +149,7 @@ base.describe('Picture-in-Picture Plugin - Behavioural (avatar tiles)', () => {
 
     joined = await joinExtraUsers(browser, modPage.meetingId, [{ fullName: userName }]);
 
-    const pipPage = await openPipWindow(modPage.page.context(), modPage.page);
+    const pipPage = await openPipWithoutContent(modPage);
     const tile = await waitForAvatarTile(pipPage, userName);
 
     await expect(tile.locator('.username'), 'the name should start out visible').toBeVisible();
@@ -219,15 +240,13 @@ base.describe('Picture-in-Picture Plugin - Behavioural (avatar tiles)', () => {
     const withImage = 'Iris Image';
     const withBrokenImage = 'Bruno Broken';
 
-    const modContext = modPage.page.context();
-
     // `avatarURL` is a /join parameter of the BBB API - NOT a userdata- key.
     joined = await joinExtraUsers(browser, modPage.meetingId, [
       { fullName: withImage, joinParameter: `avatarURL=${encodeURIComponent(AVATAR_OK_URL)}` },
       { fullName: withBrokenImage, joinParameter: `avatarURL=${encodeURIComponent(AVATAR_MISSING_URL)}` },
     ]);
 
-    const pipPage = await openPipWindow(modContext, modPage.page);
+    const pipPage = await openPipWithoutContent(modPage);
 
     const okTile = await waitForAvatarTile(pipPage, withImage);
     const okImage = okTile.locator('img');
@@ -282,7 +301,7 @@ base.describe('Picture-in-Picture Plugin - Behavioural (avatar tiles)', () => {
       { fullName: silent },
     ]);
 
-    const pipPage = await openPipWindow(modPage.page.context(), modPage.page);
+    const pipPage = await openPipWithoutContent(modPage);
 
     const talkerTile = await waitForAvatarTile(pipPage, talker);
     const silentTile = await waitForAvatarTile(pipPage, silent);
@@ -318,6 +337,32 @@ base.describe('Picture-in-Picture Plugin - Behavioural (avatar tiles)', () => {
       .locator(e.pipAvatarCircle)
       .evaluate((node) => window.getComputedStyle(node).animationName);
     expect(silentAnimation, 'the silent tile should not animate').toBe('none');
+
+    await setTabHidden(modPage.page, false);
+  });
+
+  // ── avatars-follow-the-client-dock ────────────────────────────────────────
+  // The client only shows its camera dock when someone shares a webcam or the
+  // presentation is closed. With the presentation up and no webcam the slide
+  // gets the whole window, and the avatars come back once it is minimised.
+  base('should leave the slide alone without webcams and show avatars once it is minimised', async ({ multiUserTest }) => {
+    const { modPage, attendeePage } = multiUserTest;
+
+    await modPage.page.waitForSelector(e.whiteboard, { timeout: ELEMENT_WAIT_LONGER_TIME });
+    const pipPage = await openPipWindow(modPage.page.context(), modPage.page);
+    const slide = pipPage.locator(e.pipSlideItem);
+
+    await expect(slide).toBeVisible({ timeout: ELEMENT_WAIT_LONGER_TIME });
+    await expect(pipPage.locator(e.pipTile), 'the slide should be the only cell').toHaveCount(1);
+    await expect(pipPage.locator(e.pipAvatarItem)).toHaveCount(0);
+
+    await modPage.page.click(e.minimizePresentation);
+    await expect(slide).toHaveCount(0, { timeout: ELEMENT_WAIT_LONGER_TIME });
+    await waitForAvatarTile(pipPage, attendeePage.username);
+
+    await modPage.page.click(e.restorePresentation);
+    await expect(slide).toBeVisible({ timeout: ELEMENT_WAIT_LONGER_TIME });
+    await expect(pipPage.locator(e.pipAvatarItem)).toHaveCount(0);
 
     await setTabHidden(modPage.page, false);
   });

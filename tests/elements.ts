@@ -10,6 +10,10 @@ export const elements = {
   // "Deactivate PiP Window".
   pipActionButton: 'li:has-text("PiP Window")',
 
+  // Client buttons that minimise / restore the presentation area.
+  minimizePresentation: '[data-test="minimizePresentation"]',
+  restorePresentation: '[data-test="restorePresentation"]',
+
   // Elements rendered INSIDE the documentPictureInPicture window (behavioral).
   // The window is only opened by the plugin on a visibilitychange /
   // enterpictureinpicture trigger while media is present - see

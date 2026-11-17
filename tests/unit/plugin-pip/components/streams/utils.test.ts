@@ -10,6 +10,7 @@ import {
   findOptimalGrid,
   isStreamLive,
   range,
+  shouldShowAvatars,
 } from '../../../../../src/plugin-pip/components/streams/utils';
 import { createVideoSelector } from '../../../../../src/common/bbb-selectors';
 
@@ -247,5 +248,20 @@ describe('availableAvatarSlots', () => {
 
   it('honours an explicit ceiling over the default', () => {
     expect(availableAvatarSlots(2, 6)).toBe(4);
+  });
+});
+
+describe('shouldShowAvatars', () => {
+  it('hides avatars while there is content and no webcam', () => {
+    expect(shouldShowAvatars(0, true)).toBe(false);
+  });
+
+  it('shows avatars next to webcams, with or without content', () => {
+    expect(shouldShowAvatars(1, true)).toBe(true);
+    expect(shouldShowAvatars(2, false)).toBe(true);
+  });
+
+  it('shows avatars when there is no content to fill the window', () => {
+    expect(shouldShowAvatars(0, false)).toBe(true);
   });
 });
