@@ -321,4 +321,27 @@ base.describe('Picture-in-Picture Plugin - Behavioural (avatar tiles)', () => {
 
     await setTabHidden(modPage.page, false);
   });
+
+  // ── focus-content-against-avatars ─────────────────────────────────────────
+  // Nobody shares a webcam here, so every participant is an avatar tile. The
+  // slide can still be focused against them, and the presenter gets it focused
+  // by default while the meeting is small.
+  base('should focus the slide against avatar tiles when nobody shares a webcam', async ({ multiUserTest }) => {
+    const { modPage, attendeePage } = multiUserTest;
+
+    await modPage.page.waitForSelector(e.whiteboard, { timeout: ELEMENT_WAIT_LONGER_TIME });
+    const pipPage = await openPipWindow(modPage.page.context(), modPage.page);
+    await waitForAvatarTile(pipPage, attendeePage.username);
+
+    const slide = pipPage.locator(e.pipSlideItem);
+    await expect(slide).toHaveClass(/pip-content-focused/, { timeout: ELEMENT_WAIT_LONGER_TIME });
+    const unfocus = pipPage.getByRole('button', { name: 'Unfocus content' });
+    await expect(unfocus).toBeEnabled();
+
+    await unfocus.click();
+    await expect(slide).not.toHaveClass(/pip-content-focused/);
+    await expect(pipPage.getByRole('button', { name: 'Focus content' })).toBeEnabled();
+
+    await setTabHidden(modPage.page, false);
+  });
 });
