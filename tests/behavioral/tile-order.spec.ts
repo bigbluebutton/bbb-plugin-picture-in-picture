@@ -58,8 +58,12 @@ base.describe('mixed tile grid', () => {
       const rowTracks = style.gridTemplateRows.split(' ').filter(Boolean);
       const firstTile = grid.firstElementChild;
       const columnTracks = style.gridTemplateColumns.split(' ').filter(Boolean);
+      // A focused slide/screenshare spans a 2x2 block (`.pip-content-focused`),
+      // so it takes four cells instead of one. Two webcams leave the presenter's
+      // content focused by default, which is the case here.
+      const focusedCells = grid.querySelectorAll('.pip-content-focused').length * 3;
       const expectedRows = firstTile
-        ? Math.ceil(grid.children.length / columnTracks.length)
+        ? Math.ceil((grid.children.length + focusedCells) / columnTracks.length)
         : 0;
 
       return {
