@@ -9,6 +9,7 @@ import { useVideoStreams, useScreenshare } from '../plugin-pip/components/stream
 import FocusWarning from '../plugin-pip/components/warning/component';
 import { useCurrentUserVoice } from '../plugin-pip/components/actions/hooks';
 import type { PipControls } from '../plugin-pip/components/actions/buttons/deactivate/component';
+import { OPTIONS_BUTTON_SELECTOR, reportMissingSelector } from '../common/bbb-selectors';
 import styles from './stylesheet';
 
 const isPipSupported = 'documentPictureInPicture' in window;
@@ -43,6 +44,7 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
   const { intl } = useI18n(pluginApi);
   const pipActiveRef = React.useRef(active ?? true);
   const pipWindowRef = React.useRef<Window | null>(null);
+  const openingPipRef = React.useRef(false);
   const hasMediaRef = React.useRef(false);
   const meetingIdRef = React.useRef<string | null>(null);
   const [pipEnabled, setPipEnabled] = React.useState<boolean>(active ?? true);
@@ -118,13 +120,23 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
       if (isPipSupported && pipActiveRef.current && hasMediaRef.current) {
         // @ts-expect-error This web API may not be supported by all major browsers.
         if (documentPictureInPicture.window) return false;
+        // Both triggers - visibilitychange and the mediaSession action - can
+        // reach the check above before either has finished awaiting
+        // requestWindow, so the guard alone does not prevent a double open.
+        if (openingPipRef.current) return false;
+        openingPipRef.current = true;
 
-        // @ts-expect-error This web API may not be supported by all major browsers.
-        const pipWindow = await documentPictureInPicture.requestWindow({
-          height: 270,
-          width: 480,
-          preferInitialWindowPlacement: true,
-        });
+        let pipWindow;
+        try {
+          // @ts-expect-error This web API may not be supported by all major browsers.
+          pipWindow = await documentPictureInPicture.requestWindow({
+            height: 270,
+            width: 480,
+            preferInitialWindowPlacement: true,
+          });
+        } finally {
+          openingPipRef.current = false;
+        }
 
         pipWindowRef.current = pipWindow;
 
@@ -155,12 +167,6 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
         icons.type = 'text/css';
         icons.href = 'stylesheets/bbb-icons.css';
         pipWindow.document.head.appendChild(icons);
-
-        const fonts = document.createElement('link');
-        fonts.rel = 'stylesheet';
-        fonts.type = 'text/css';
-        fonts.href = 'stylesheets/bbb-icons.css';
-        pipWindow.document.head.appendChild(fonts);
 
         pipRoot.render(
           <Pip
@@ -238,8 +244,13 @@ function MainComponent({ pluginUuid, active }: MainComponentProps): React.ReactN
 
     if (showFocusWarning) {
       // Show the warning right below the options dropdown button, where the PiP
-      // toggle lives, and keep it inside the viewport.
-      const optionsButton = document.querySelector('[data-test="optionsButton"]');
+      // toggle lives, and keep it inside the viewport. The anchor belongs to the
+      // BBB client, not to this plugin: if it is ever renamed or not rendered,
+      // fall back to the top-right corner and report the stale selector.
+      const optionsButton = document.querySelector(OPTIONS_BUTTON_SELECTOR);
+      if (!optionsButton) {
+        reportMissingSelector(OPTIONS_BUTTON_SELECTOR, 'anchor for the focus warning');
+      }
       const rect = optionsButton?.getBoundingClientRect();
       const maxLeft = window.innerWidth - FOCUS_WARNING_WIDTH - FOCUS_WARNING_MARGIN;
       const maxTop = window.innerHeight - FOCUS_WARNING_HEIGHT - FOCUS_WARNING_MARGIN;

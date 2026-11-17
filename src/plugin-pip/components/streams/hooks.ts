@@ -1,11 +1,19 @@
 import * as React from 'react';
-import { PluginApi, PresentationWhiteboardUiDataNames } from 'bigbluebutton-html-plugin-sdk';
+import {
+  LayoutPresentationAreaUiDataNames,
+  PluginApi,
+  PresentationWhiteboardUiDataNames,
+  UiLayouts,
+} from 'bigbluebutton-html-plugin-sdk';
 import {
   type VideoStreamsSubscriptionResult,
   SCREENSHARE,
   ScreenshareSubscriptionResult,
   VIDEO_STREAMS_SUBSCRIPTION,
+  USERS_SUBSCRIPTION,
+  type UsersSubscriptionResult,
 } from './queries';
+import { MAX_TILES } from './utils';
 
 export const useVideoStreams = (pluginApi: PluginApi) => {
   const response = pluginApi.useCustomSubscription!<VideoStreamsSubscriptionResult>(
@@ -14,11 +22,25 @@ export const useVideoStreams = (pluginApi: PluginApi) => {
   return response;
 };
 
+export const useUsers = (pluginApi: PluginApi) => pluginApi.useCustomSubscription!<
+  UsersSubscriptionResult
+>(USERS_SUBSCRIPTION, { variables: { limit: MAX_TILES } });
+
 export const useScreenshare = (pluginApi: PluginApi) => {
   const response = pluginApi.useCustomSubscription!<ScreenshareSubscriptionResult>(
     SCREENSHARE,
   );
   return response;
+};
+
+export const usePresentationAreaOpen = (pluginApi: PluginApi) => {
+  const content = pluginApi.useUiData!(
+    LayoutPresentationAreaUiDataNames.CURRENT_ELEMENT,
+    [{ currentElement: UiLayouts.WHITEBOARD, isOpen: true }],
+  );
+  // The last open element is the one on top of the presentation area
+  const visible = [...content].reverse().find((element) => element.isOpen);
+  return visible?.currentElement === UiLayouts.WHITEBOARD;
 };
 
 const SLIDE_SNAPSHOT_INTERVAL_MS = 5000;
@@ -31,6 +53,12 @@ interface PresentationSnapshot {
 export const usePresentationSnapshot = (
   pluginApi: PluginApi,
   enabled: boolean,
+  /**
+   * Window whose timers drive the refresh. The main document is hidden while
+   * the plugin runs and browsers throttle timers there to roughly once a
+   * minute, which would stall the slide; the PiP window is visible.
+   */
+  pipWindow?: Window,
 ): PresentationSnapshot => {
   const [image, setImage] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -61,11 +89,12 @@ export const usePresentationSnapshot = (
     };
 
     update();
-    const intervalId = setInterval(update, SLIDE_SNAPSHOT_INTERVAL_MS);
+    const timerWindow = pipWindow ?? window;
+    const intervalId = timerWindow.setInterval(update, SLIDE_SNAPSHOT_INTERVAL_MS);
     return () => {
-      clearInterval(intervalId);
+      timerWindow.clearInterval(intervalId);
     };
-  }, [pluginApi, enabled]);
+  }, [pluginApi, enabled, pipWindow]);
 
   return { image, isLoading };
 };

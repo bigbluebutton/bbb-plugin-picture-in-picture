@@ -30,6 +30,27 @@ interface ToastContextValue {
   hideToast: (id: string) => void;
 }
 
+export const getBackgroundColor = (type: ToastType): string => {
+  const colors: Record<ToastType, string> = {
+    default: '#303030',
+    success: '#10b981',
+    error: '#ef4444',
+    warning: '#f59e0b',
+    info: '#3b82f6',
+  };
+  return colors[type];
+};
+
+export const getIcon = (type: ToastType): string | undefined => {
+  const icons: Partial<Record<ToastType, string>> = {
+    success: '✓',
+    error: '✕',
+    warning: '⚠',
+    info: 'ℹ',
+  };
+  return icons[type];
+};
+
 const ToastContext = React.createContext<ToastContextValue | undefined>(undefined);
 
 interface ToastProviderProps {
@@ -63,27 +84,6 @@ function ToastItem({ intl, toast, onClose }: ToastItemProps) {
     setTimeout(() => {
       onClose(toast.id);
     }, 300);
-  };
-
-  const getBackgroundColor = (type: ToastType): string => {
-    const colors: Record<ToastType, string> = {
-      default: '#303030',
-      success: '#10b981',
-      error: '#ef4444',
-      warning: '#f59e0b',
-      info: '#3b82f6',
-    };
-    return colors[type];
-  };
-
-  const getIcon = (type: ToastType): string | undefined => {
-    const icons: Partial<Record<ToastType, string>> = {
-      success: '✓',
-      error: '✕',
-      warning: '⚠',
-      info: 'ℹ',
-    };
-    return icons[type];
   };
 
   const getTransform = () => {
